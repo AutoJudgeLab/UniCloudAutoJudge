@@ -1,0 +1,160 @@
+name: online-judge
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-online_judge}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      TZ: UTC
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:8-alpine
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+    command:
+      - /bin/sh
+      - -c
+      - exec redis-server --appendonly yes --appendfsync always --maxmemory-policy noeviction --requirepass "$$REDIS_PASSWORD"
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  minio:
+    image: online-judge-minio:RELEASE.2025-10-15T17-29-55Z
+    pull_policy: build
+    build:
+      context: ./minio
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
+      MINIO_SITE_REGION: ${S3_REGION:-us-east-1}
+      MINIO_API_STALE_UPLOADS_EXPIRY: ${MINIO_STALE_UPLOADS_EXPIRY:-24h}
+      MINIO_API_STALE_UPLOADS_CLEANUP_INTERVAL: ${MINIO_STALE_UPLOADS_CLEANUP_INTERVAL:-1h}
+    command: server /data --console-address ":9001"
+    ports:
+      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  minio-init:
+    image: online-judge-minio-client:RELEASE.2025-08-13T08-35-41Z
+    pull_policy: build
+    build:
+      context: ./minio-client
+    profiles: [storage-init, api]
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?Set S3_ACCESS_KEY in .env}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?Set S3_SECRET_KEY in .env}
+      S3_BUCKET: ${S3_BUCKET:-judge-private}
+      S3_REGION: ${S3_REGION:-us-east-1}
+    entrypoint: [/bin/sh, /init-storage.sh]
+    volumes:
+      - ./minio/init-storage.sh:/init-storage.sh:ro
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: "no"
+
+
+  judge-api:
+    image: online-judge-api:0.1.0-SNAPSHOT
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/judge-api/Dockerfile
+    profiles: [api]
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-online_judge}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      S3_ENDPOINT: http://minio:9000
+      SERVER_PORT: 8080
+      POSTGRES_USER: "${POSTGRES_USER:-judge}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-}"
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
+      REDIS_USERNAME: "${REDIS_USERNAME:-}"
+      REDIS_SSL_ENABLED: "${REDIS_SSL_ENABLED:-false}"
+      REDIS_CONNECT_TIMEOUT: "${REDIS_CONNECT_TIMEOUT:-2s}"
+      REDIS_COMMAND_TIMEOUT: "${REDIS_COMMAND_TIMEOUT:-2s}"
+      REDIS_SUBMISSION_STREAM: "${REDIS_SUBMISSION_STREAM:-judge:submissions:v1}"
+      REDIS_STREAM_MAX_LENGTH: "${REDIS_STREAM_MAX_LENGTH:-100000}"
+      S3_ACCESS_KEY: "${S3_ACCESS_KEY:-}"
+      S3_SECRET_KEY: "${S3_SECRET_KEY:-}"
+      S3_BUCKET: "${S3_BUCKET:-judge-private}"
+      S3_REGION: "${S3_REGION:-us-east-1}"
+      S3_MAX_UPLOAD_SIZE: "${S3_MAX_UPLOAD_SIZE:-1MB}"
+      S3_MAX_REQUEST_SIZE: "${S3_MAX_REQUEST_SIZE:-2MB}"
+      S3_ALLOWED_EXTENSIONS: "${S3_ALLOWED_EXTENSIONS:-java,py,c,cpp,js,ts,kt,go,rs,cs}"
+      S3_REQUEST_TIMEOUT: "${S3_REQUEST_TIMEOUT:-10s}"
+      JWT_PRIVATE_KEY_BASE64: "${JWT_PRIVATE_KEY_BASE64:-}"
+      JWT_PUBLIC_KEY_BASE64: "${JWT_PUBLIC_KEY_BASE64:-}"
+      JWT_ISSUER: "${JWT_ISSUER:-online-judge}"
+      JWT_AUDIENCE: "${JWT_AUDIENCE:-judge-api}"
+      JWT_ACCESS_TOKEN_TTL: "${JWT_ACCESS_TOKEN_TTL:-15m}"
+      ADMIN_BOOTSTRAP_ENABLED: "${ADMIN_BOOTSTRAP_ENABLED:-false}"
+      ADMIN_BOOTSTRAP_USERNAME: "${ADMIN_BOOTSTRAP_USERNAME:-}"
+      ADMIN_BOOTSTRAP_EMAIL: "${ADMIN_BOOTSTRAP_EMAIL:-}"
+      ADMIN_BOOTSTRAP_PASSWORD: "${ADMIN_BOOTSTRAP_PASSWORD:-}"
+      OPENAPI_ENABLED: "${OPENAPI_ENABLED:-true}"
+      OUTBOX_ENABLED: "${OUTBOX_ENABLED:-true}"
+      OUTBOX_BATCH_SIZE: "${OUTBOX_BATCH_SIZE:-25}"
+      OUTBOX_POLL_INTERVAL: "${OUTBOX_POLL_INTERVAL:-PT1S}"
+      OUTBOX_RETRY_INITIAL_DELAY: "${OUTBOX_RETRY_INITIAL_DELAY:-1s}"
+      OUTBOX_RETRY_MAX_DELAY: "${OUTBOX_RETRY_MAX_DELAY:-5m}"
+      SUBMISSION_CLEANUP_ENABLED: "${SUBMISSION_CLEANUP_ENABLED:-true}"
+      SUBMISSION_CLEANUP_INTERVAL: "${SUBMISSION_CLEANUP_INTERVAL:-PT1M}"
+      SUBMISSION_CLEANUP_INITIAL_DELAY: "${SUBMISSION_CLEANUP_INITIAL_DELAY:-15m}"
+      SUBMISSION_CLEANUP_RETRY_DELAY: "${SUBMISSION_CLEANUP_RETRY_DELAY:-1h}"
+      SUBMISSION_CLEANUP_BATCH_SIZE: "${SUBMISSION_CLEANUP_BATCH_SIZE:-20}"
+      METRICS_SNAPSHOT_INTERVAL: "${METRICS_SNAPSHOT_INTERVAL:-PT30S}"
+      LOG_FORMAT: "${LOG_FORMAT:-ecs}"
+    ports:
+      - "127.0.0.1:${SERVER_PORT:-8080}:8080"
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      minio-init: {condition: service_completed_successfully}
+    read_only: true
+    tmpfs: ["/tmp:size=512m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    cpus: 2
+    restart: unless-stopped
+    stop_grace_period: 45s
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:

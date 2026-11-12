@@ -1,0 +1,16 @@
+**/target/
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+.vscode/
+.DS_Store
+.local/
+*.log
+.env
+.env.*
+!.env.example
+
+**/__pycache__/
+load-summary.json
