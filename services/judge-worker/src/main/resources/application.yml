@@ -1,0 +1,55 @@
+spring:
+  application:
+    name: judge-worker
+  main:
+    web-application-type: none
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD}
+      username: ${REDIS_USERNAME:}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:2s}
+      # Must stay well above judge.worker.block-timeout: XREADGROUP blocks on the shared connection.
+      timeout: ${WORKER_REDIS_COMMAND_TIMEOUT:10s}
+      ssl:
+        enabled: ${REDIS_SSL_ENABLED:false}
+
+judge:
+  worker:
+    stream: ${REDIS_SUBMISSION_STREAM:judge:submissions:v1}
+    dead-letter-stream: ${WORKER_DEAD_LETTER_STREAM:judge:submissions:dead:v1}
+    group: ${WORKER_GROUP:judge-workers}
+    consumer-name: ${WORKER_CONSUMER_NAME:${HOSTNAME:${COMPUTERNAME:worker-1}}}
+    concurrency: ${WORKER_CONCURRENCY:2}
+    max-deliveries: ${WORKER_MAX_DELIVERIES:5}
+    block-timeout: ${WORKER_BLOCK_TIMEOUT:2s}
+    # A delivery idle for this long is treated as abandoned and retried. Keep it above the longest
+    # possible evaluation: compile limit + tests x (time limit + startup grace).
+    reclaim-idle: ${WORKER_RECLAIM_IDLE:5m}
+    shutdown-grace: ${WORKER_SHUTDOWN_GRACE:2m}
+    api:
+      base-url: ${JUDGE_API_BASE_URL:http://localhost:8080}
+      token: ${JUDGE_WORKER_TOKEN}
+      connect-timeout: ${WORKER_API_CONNECT_TIMEOUT:5s}
+      request-timeout: ${WORKER_API_REQUEST_TIMEOUT:30s}
+    limits:
+      # Used when the job does not carry its own limits (assignments have no limit fields today).
+      time-limit: ${WORKER_TIME_LIMIT:5s}
+      memory-mb: ${WORKER_MEMORY_MB:256}
+      compile-time-limit: ${WORKER_COMPILE_TIME_LIMIT:30s}
+      compile-memory-mb: ${WORKER_COMPILE_MEMORY_MB:512}
+      max-output-bytes: ${WORKER_MAX_OUTPUT_BYTES:1048576}
+      stored-output-bytes: ${WORKER_STORED_OUTPUT_BYTES:16384}
+    sandbox:
+      docker-binary: ${WORKER_DOCKER_BINARY:docker}
+      cpus: ${WORKER_SANDBOX_CPUS:1.0}
+      pids-limit: ${WORKER_SANDBOX_PIDS:128}
+      tmpfs-mb: ${WORKER_SANDBOX_TMPFS_MB:64}
+      # Container start-up is outside the student's control, so it is not counted against the time limit.
+      startup-grace: ${WORKER_SANDBOX_STARTUP_GRACE:2s}
+    languages:
+      enabled: ${WORKER_LANGUAGES:JAVA}
+      java-image: ${WORKER_JAVA_IMAGE:eclipse-temurin:21-jdk}
+      python-image: ${WORKER_PYTHON_IMAGE:python:3.13-slim}
+      gcc-image: ${WORKER_GCC_IMAGE:gcc:14}
