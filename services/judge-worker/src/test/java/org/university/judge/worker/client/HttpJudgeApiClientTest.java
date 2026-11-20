@@ -128,4 +128,17 @@ class HttpJudgeApiClientTest {
                 () -> client.begin(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID()));
         assertTrue(!(failure instanceof PermanentApiException));
     }
+
+    @Test
+    void heartbeatUsesTheAttemptIdentityAndDistinguishesStaleFromTransientFailure() throws Exception {
+        UUID submission = UUID.randomUUID(), attempt = UUID.randomUUID();
+        serve(200, "{\"leaseMillis\":120000}", (client, seen) -> {
+            assertEquals(120000, client.heartbeat(submission, attempt));
+            assertEquals("/internal/worker/v1/submissions/" + submission + "/attempts/" + attempt + "/heartbeat", seen.get().path());
+            assertEquals("Bearer test-token", seen.get().authorization());
+        });
+        serve(409, "", (client, seen) -> assertThrows(StaleAttemptException.class, () -> client.heartbeat(submission, attempt)));
+        serve(503, "", (client, seen) -> assertThrows(ApiException.class, () -> client.heartbeat(submission, attempt)));
+        serve(200, "{\"leaseMillis\":0}", (client, seen) -> assertThrows(ApiException.class, () -> client.heartbeat(submission, attempt)));
+    }
 }

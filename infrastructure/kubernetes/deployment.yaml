@@ -37,9 +37,13 @@ spec:
             - name: S3_SECRET_KEY
               valueFrom: {secretKeyRef: {name: judge-api-secrets, key: s3-secret-key}}
             - name: JWT_PRIVATE_KEY_BASE64
-              valueFrom: {secretKeyRef: {name: judge-api-secrets, key: jwt-private-key-base64}}
+              valueFrom: {secretKeyRef: {name: judge-api-secrets, key: jwt-private-key-base64, optional: true}}
             - name: JWT_PUBLIC_KEY_BASE64
-              valueFrom: {secretKeyRef: {name: judge-api-secrets, key: jwt-public-key-base64}}
+              valueFrom: {secretKeyRef: {name: judge-api-secrets, key: jwt-public-key-base64, optional: true}}
+            - name: PORTAL_CLIENT_SECRET
+              valueFrom: {secretKeyRef: {name: judge-api-secrets, key: portal-client-secret, optional: true}}
+            - name: JUDGE_WORKER_TOKEN
+              valueFrom: {secretKeyRef: {name: judge-api-secrets, key: judge-worker-token, optional: true}}
           resources:
             requests: {cpu: 250m, memory: 512Mi, ephemeral-storage: 256Mi}
             limits: {cpu: "2", memory: 1Gi, ephemeral-storage: 1Gi}

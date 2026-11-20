@@ -40,6 +40,8 @@ class SubmissionProcessorTest {
 
     /** Records calls and answers them from scripts that tests replace. */
     private static final class FakeApi implements JudgeApiClient {
+        java.util.function.LongSupplier onHeartbeat = () -> 240_000;
+        @Override public long heartbeat(UUID submissionId, UUID attemptId) { return onHeartbeat.getAsLong(); }
         final List<UUID> attempts = new ArrayList<>();
         final List<EvaluationReport> stored = new ArrayList<>();
         int completeCalls;
@@ -148,9 +150,9 @@ class SubmissionProcessorTest {
     }
 
     @Test
-    void replacedAttemptDropsItsResultQuietly() {
+    void replacedAttemptCannotAcknowledgeWorkOwnedByItsReplacement() {
         api.beforeComplete = () -> { throw new StaleAttemptException("replaced"); };
-        assertEquals(Action.ACKNOWLEDGE, processor().process(event(1)).action());
+        assertEquals(Action.RETRY_LATER, processor().process(event(1)).action());
         assertTrue(api.stored.isEmpty());
     }
 
@@ -175,5 +177,33 @@ class SubmissionProcessorTest {
         future.put("eventVersion", "2");
         assertEquals("UNSUPPORTED_EVENT", processor().process(new QueuedEvent("1-0", future, 1)).reason());
         assertTrue(api.attempts.isEmpty());
+    }
+
+    @Test
+    void rejectedReportCanFinalizeTheCurrentAttemptAsInternalError() {
+        int[] remaining = {1};
+        api.beforeComplete = () -> { if (remaining[0]-- > 0) throw new PermanentApiException("422"); };
+        assertEquals(Action.ACKNOWLEDGE, processor().process(event(1)).action());
+        assertEquals(Verdict.INTERNAL_ERROR, api.stored.getFirst().verdict());
+        assertEquals(2, api.completeCalls);
+    }
+
+    @Test
+    void staleHeartbeatStopsGradingWithoutReportingAnInternalErrorOrAcknowledging() {
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        api.onHeartbeat = () -> {
+            if (calls.incrementAndGet() > 1) throw new StaleAttemptException("replaced");
+            return 90;
+        };
+        sandbox = request -> {
+            try { Thread.sleep(5000); }
+            catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            return RunResult.sandboxError("interrupted");
+        };
+        try {
+            assertEquals(Action.RETRY_LATER, processor().process(event(MAX_DELIVERIES)).action());
+            assertTrue(api.stored.isEmpty());
+            assertEquals(0, api.completeCalls);
+        } finally { Thread.interrupted(); }
     }
 }

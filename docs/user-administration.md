@@ -130,7 +130,8 @@ authentication provider.
 Mutations run in transactions and acquire the same PostgreSQL transaction advisory
 lock used by bootstrap and the existing administrator guard, before taking row
 locks. This serializes infrequent administrative writes across API instances.
-Reads, ordinary authentication, and login do not acquire this advisory lock.
+Reads and local JWT authentication do not acquire this advisory lock. Portal
+identity provisioning/synchronization uses it to preserve the same lock order.
 
 After acquiring it, the service locks and reloads the acting administrator and
 checks their current enabled state, role, and authentication version. A request
@@ -140,7 +141,8 @@ for update, checked, and changed. This also prevents concurrent role/status upda
 from overwriting each other's changes.
 
 The service checks that disabling an administrator leaves another active ADMIN.
-The V4 database trigger remains unchanged and provides an additional invariant
+V11 scopes the last-administrator guard to local accounts, allowing Portal role
+revocations to take effect. For local accounts the database trigger provides an additional invariant
 against deletion, disabling, and demotion, including out-of-band writes. Concurrent
 administrators cannot disable all active administrators. A database concurrency
 failure returns `409 CONCURRENT_UPDATE`; callers can retry.

@@ -1,5 +1,6 @@
 package org.university.judge.api.auth;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -13,6 +14,7 @@ import org.university.judge.api.security.JwtSettings;
 import org.university.judge.api.user.User;
 
 @Service
+@ConditionalOnProperty(name = "security.authentication-mode", havingValue = "local", matchIfMissing = true)
 public class AccessTokenService {
     private final JwtEncoder encoder;
     private final JwtSettings settings;

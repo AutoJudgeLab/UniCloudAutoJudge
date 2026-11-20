@@ -1,5 +1,6 @@
 package org.university.judge.api.auth;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -18,6 +19,11 @@ import org.university.judge.api.user.UserResponse;
 @RestController
 @RequestMapping("/api/auth")
 @Tag(name = "Authentication")
+@ApiResponse(responseCode = "429", description = "Authentication rate limit exceeded; retry after Retry-After seconds",
+        content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+@ApiResponse(responseCode = "503", description = "Authentication rate limiter is temporarily unavailable",
+        content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+@ConditionalOnProperty(name = "security.authentication-mode", havingValue = "local", matchIfMissing = true)
 public class AuthController {
     private final AuthenticationService authentication;
 

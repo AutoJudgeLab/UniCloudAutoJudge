@@ -1,5 +1,6 @@
 package org.university.judge.api.security;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import java.security.KeyFactory;
 import java.security.interfaces.RSAPrivateCrtKey;
 import java.security.interfaces.RSAPrivateKey;
@@ -30,6 +31,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(JwtSettings.class)
+@ConditionalOnProperty(name = "security.authentication-mode", havingValue = "local", matchIfMissing = true)
 public class JwtConfiguration {
     @Bean
     RSAKey signingKey(JwtSettings settings) {

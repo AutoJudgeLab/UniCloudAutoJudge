@@ -142,6 +142,7 @@ reports exist only inside tests, where they exercise visibility, historical
 snapshots, dates, pagination, ranking ties, duplicate/stale attempts, concurrency,
 and immutable completion. Existing submission/storage tests retain MinIO coverage.
 
-Secure worker transport, automatic execution, source-download
-endpoints, and judge-worker implementation remain deferred.
+The [worker transport](worker-transport.md) now supplies source/sealed tests and
+persists evaluations from the Docker worker. Public source-download and rejudge
+endpoints remain outside the current API.
 

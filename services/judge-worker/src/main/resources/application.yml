@@ -24,8 +24,7 @@ judge:
     concurrency: ${WORKER_CONCURRENCY:2}
     max-deliveries: ${WORKER_MAX_DELIVERIES:5}
     block-timeout: ${WORKER_BLOCK_TIMEOUT:2s}
-    # A delivery idle for this long is treated as abandoned and retried. Keep it above the longest
-    # possible evaluation: compile limit + tests x (time limit + startup grace).
+    # Live deliveries refresh their idle time every third of this interval.
     reclaim-idle: ${WORKER_RECLAIM_IDLE:5m}
     shutdown-grace: ${WORKER_SHUTDOWN_GRACE:2m}
     api:
@@ -46,10 +45,18 @@ judge:
       cpus: ${WORKER_SANDBOX_CPUS:1.0}
       pids-limit: ${WORKER_SANDBOX_PIDS:128}
       tmpfs-mb: ${WORKER_SANDBOX_TMPFS_MB:64}
+      workspace-bytes: ${WORKER_WORKSPACE_BYTES:536870912}
+      workspace-files: ${WORKER_WORKSPACE_FILES:10000}
       # Container start-up is outside the student's control, so it is not counted against the time limit.
       startup-grace: ${WORKER_SANDBOX_STARTUP_GRACE:2s}
     languages:
-      enabled: ${WORKER_LANGUAGES:JAVA}
+      enabled: ${WORKER_LANGUAGES:JAVA,PYTHON,C,CPP,JAVASCRIPT,TYPESCRIPT,KOTLIN,GO,RUST,CSHARP}
       java-image: ${WORKER_JAVA_IMAGE:eclipse-temurin:21-jdk}
       python-image: ${WORKER_PYTHON_IMAGE:python:3.13-slim}
       gcc-image: ${WORKER_GCC_IMAGE:gcc:14}
+      node-image: ${WORKER_NODE_IMAGE:node:22-bookworm-slim}
+      typescript-image: ${WORKER_TYPESCRIPT_IMAGE:judge-typescript:5.8.3}
+      kotlin-image: ${WORKER_KOTLIN_IMAGE:judge-kotlin:2.1.20}
+      go-image: ${WORKER_GO_IMAGE:golang:1.24-bookworm}
+      rust-image: ${WORKER_RUST_IMAGE:rust:1.85-bookworm}
+      csharp-image: ${WORKER_CSHARP_IMAGE:mcr.microsoft.com/dotnet/sdk:8.0}

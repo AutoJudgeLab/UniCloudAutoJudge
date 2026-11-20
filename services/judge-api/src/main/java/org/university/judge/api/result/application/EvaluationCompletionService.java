@@ -25,7 +25,7 @@ import org.university.judge.api.testcase.persistence.TestCaseRepository;
 
 /**
  * Internal completion boundary. Local JWT authentication NEVER grants this authority.
- * A future authenticated transport must verify evaluator identity and scope before invoking it.
+ * The internal worker transport verifies a separate evaluator identity before invoking it.
  */
 @Service
 @PreAuthorize("hasAuthority('EVALUATION_WRITE')")
@@ -89,6 +89,9 @@ public class EvaluationCompletionService {
     private static void require(boolean condition, String message) {
         if (!condition) throw new EvaluationConflictException(message);
     }
+    private static void valid(boolean condition, String message) {
+        if (!condition) throw new EvaluationValidationException(message);
+    }
     private static boolean score(BigDecimal value) {
         return value != null && value.signum() >= 0 && value.stripTrailingZeros().scale() <= 4
                 && value.compareTo(new BigDecimal("1000000000000000")) < 0;
@@ -96,8 +99,8 @@ public class EvaluationCompletionService {
     private static boolean duration(Long value) { return value == null || value >= 0; }
 
     private static void validate(EvaluationCompletion report, List<TestCase> configured) {
-        require(report.verdict() != null && report.tests() != null && score(report.totalScore()) && duration(report.executionTimeMs()), "Invalid summary");
-        require(report.totalTests() == configured.size() && !configured.isEmpty(), "Test count must match the sealed revision");
+        valid(report.verdict() != null && report.tests() != null && score(report.totalScore()) && duration(report.executionTimeMs()), "Invalid summary");
+        valid(report.totalTests() == configured.size() && !configured.isEmpty(), "Test count must match the sealed revision");
         Map<UUID, TestCase> remaining = new HashMap<>();
         configured.forEach(test -> remaining.put(test.getId(), test));
         BigDecimal sum = BigDecimal.ZERO;
@@ -105,26 +108,26 @@ public class EvaluationCompletionService {
         boolean internal = false;
         for (var test : report.tests()) {
             var definition = remaining.remove(test.testCaseId());
-            require(definition != null, "Duplicate test or test outside the submission revision");
-            require(test.status() != null && score(test.awardedPoints()) && duration(test.executionTimeMs()), "Invalid test outcome");
-            require(test.actualOutput() == null || (test.actualOutput().indexOf(0) < 0
+            valid(definition != null, "Duplicate test or test outside the submission revision");
+            valid(test.status() != null && score(test.awardedPoints()) && duration(test.executionTimeMs()), "Invalid test outcome");
+            valid(test.actualOutput() == null || (test.actualOutput().indexOf(0) < 0
                     && test.actualOutput().getBytes(StandardCharsets.UTF_8).length <= 65536), "Output exceeds the 64 KiB limit or contains NUL");
             boolean accepted = test.status() == Verdict.ACCEPTED;
-            require(test.awardedPoints().compareTo(accepted ? definition.getPoints() : BigDecimal.ZERO) == 0,
+            valid(test.awardedPoints().compareTo(accepted ? definition.getPoints() : BigDecimal.ZERO) == 0,
                     "Accepted tests earn their configured points; other outcomes earn zero");
             if (accepted) passed++;
             if (test.status() == Verdict.INTERNAL_ERROR) internal = true;
             sum = sum.add(test.awardedPoints());
         }
-        require(report.totalScore().compareTo(sum) == 0 && report.passedTests() == passed, "Summary does not match reported tests");
+        valid(report.totalScore().compareTo(sum) == 0 && report.passedTests() == passed, "Summary does not match reported tests");
         boolean compile = report.verdict() == Verdict.COMPILATION_ERROR;
         boolean failed = report.verdict() == Verdict.INTERNAL_ERROR;
-        require(!internal || failed, "Internal test errors require an internal-error summary");
-        if (compile) require(report.tests().isEmpty() && report.totalScore().signum() == 0, "Compilation failure cannot contain executed tests");
-        else if (!failed) require(remaining.isEmpty(), "Every configured test must be reported");
-        if (report.verdict() == Verdict.ACCEPTED) require(passed == configured.size(), "Accepted summary requires all tests to pass");
+        valid(!internal || failed, "Internal test errors require an internal-error summary");
+        if (compile) valid(report.tests().isEmpty() && report.totalScore().signum() == 0, "Compilation failure cannot contain executed tests");
+        else if (!failed) valid(remaining.isEmpty(), "Every configured test must be reported");
+        if (report.verdict() == Verdict.ACCEPTED) valid(passed == configured.size(), "Accepted summary requires all tests to pass");
         else if (!failed && !compile) {
-            require(passed < configured.size() && report.tests().stream().anyMatch(test -> test.status() == report.verdict()),
+            valid(passed < configured.size() && report.tests().stream().anyMatch(test -> test.status() == report.verdict()),
                     "Verdict must describe a reported failure");
         }
     }

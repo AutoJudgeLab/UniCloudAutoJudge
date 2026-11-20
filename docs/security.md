@@ -22,7 +22,13 @@ archives are not extracted. Code is never executed by the API.
 
 Redis requires authentication locally. In production use TLS and least-privilege
 ACLs on the configured stream; the producer needs XADD, XLEN and health PING,
-while consumer permissions belong to a different service identity. Separate
+while consumers use a different service identity. Worker ACLs must allow
+XGROUP CREATE, XREADGROUP, XPENDING, XCLAIM, XACK, XADD and
+the EVAL/EVALSHA/SCRIPT LOAD operations used for atomic renewal/dead-letter scripts,
+restricted to its submission and dead-letter stream keys. The current Compose
+deployment uses standalone Redis. Redis Cluster would additionally require both
+script keys to share a hash slot and appropriate stream-name configuration.
+Separate
 metrics and administrative operator access. Do not expose database, Redis,
 MinIO admin console, or Kubernetes management ports to untrusted clients.
 
@@ -36,6 +42,21 @@ Kubernetes Secrets are references, not checked-in values and not encryption by
 themselves: enable encryption at rest/RBAC or an external secret manager. Rotate
 JWT and storage credentials through a planned rollout. Backups need the same
 privacy controls as production. No default password or worker credentials exist.
-See [worker integration](worker-integration.md) for the unimplemented secure
-transport that must be established before any evaluator is connected.
+See [worker transport](worker-transport.md) for the implemented begin, heartbeat
+and completion API. Its dedicated service credential grants evaluation access
+only; user and Portal tokens cannot call these endpoints.
+
+Portal mode uses OIDC/PKCE and shared Redis HTTP sessions with a 30-minute idle
+timeout. Access tokens and OIDC state remain server-side; Redis session data must
+be private, authenticated and encrypted in transit in production. Allow session
+hash/read/write/expiry operations on judge:portal:sessions:* for the API identity.
+The session store uses Spring Session's trusted Java serialization: only the API
+may write this namespace. Do not share that Redis credential with other modules.
+UserInfo is intentionally checked for each request so role revocation is immediate;
+an outage fails closed. Identity synchronization locks only the affected external
+identity and leaves unchanged profiles untouched.
+
+Compiler workspaces have file-size, byte and entry budgets. Production workers
+also require a dedicated filesystem with a hard aggregate quota; the supplied
+[Linux worker units](../infrastructure/systemd/README.md) use a bounded tmpfs.
 

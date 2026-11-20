@@ -1,8 +1,9 @@
-# Future worker integration
+# Worker integration
 
-judge-worker remains an ordinary Maven JAR with only its POM and empty source
-folders preserved by .gitkeep. There are no classes, Boot entry points, consumers,
-execution logic, Docker images, or Kubernetes resources for it.
+judge-worker consumes Redis events, obtains source and sealed tests through authenticated internal
+HTTP routes, executes code in Docker and stores the result through the API. See the implemented
+[worker transport](worker-transport.md) and [language toolchains](../services/judge-worker/README.md).
+The ordinary JAR is usable in integration tests; the `-exec.jar` is the runnable worker application.
 
 ## Redis wire contract
 
@@ -27,13 +28,11 @@ retries and replays. Redis's generated stream record ID changes on each delivery
 No source bytes, original filenames, passwords, JWTs, hidden grading data,
 MinIO keys/credentials, or arbitrary JSON payload fields are sent.
 
-## Required before implementing a consumer
+## Processing and operational requirements
 
-- Authenticate the worker service and authorize its job/source/revision access.
-  There is currently no worker HTTP transport. Design scoped service identities,
-  issuer/audience validation or mTLS, and auditing before creating one. An event
-  contains no download grant. Workers must not receive unrestricted database or
-  MinIO-root credentials or reuse student JWTs.
+- Enable the internal HTTP transport with a separate opaque service credential granting only
+  `EVALUATION_WRITE`. The API validates the event/submission/revision relationship. Events are not
+  download grants. Workers must not receive database or MinIO credentials or reuse student JWTs.
 - Use Redis consumer groups, explicitly chosen start offsets, pending-entry
   recovery/claiming, and acknowledgements only after durable processing state.
 - Deduplicate durably by eventId and protect submission/attempt state; consumers
@@ -46,8 +45,8 @@ MinIO keys/credentials, or arbitrary JSON payload fields are sent.
 - Retrieve the exact immutable assignment revision, not the current editable
   tests. Keep hidden tests and source isolated from other users.
 - Run untrusted code in a separately designed sandbox with CPU/memory/time/network
-  limits and artifact/output bounds. None of that isolation/execution is supplied
-  by judge-api or these manifests.
+  limits and artifact/output bounds. Execution is implemented in judge-worker, never judge-api.
+  Review residual sandbox risks and target-host isolation before public deployment.
 - Coordinate consumer lag/PEL recovery with bounded stream retention. Replay from
   retained PostgreSQL outbox rows is required after trimming or Redis loss. Initial
   consumer onboarding must also recover old pending submissions whose entries

@@ -1,0 +1,29 @@
+[Unit]
+Description=UniCloud Judge worker
+After=network-online.target docker.service
+Requires=docker.service
+RequiresMountsFor=/var/lib/judge-work
+AssertPathIsMountPoint=/var/lib/judge-work
+
+[Service]
+Type=simple
+User=judge-worker
+Group=judge-worker
+SupplementaryGroups=docker
+EnvironmentFile=/etc/judge/worker.env
+WorkingDirectory=/opt/judge
+ExecStart=/usr/bin/java -Djava.io.tmpdir=/var/lib/judge-work -jar /opt/judge/judge-worker.jar
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=150
+KillSignal=SIGTERM
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/judge-work
+# Docker bind mounts must see the same host path as the worker.
+PrivateTmp=false
+
+[Install]
+WantedBy=multi-user.target

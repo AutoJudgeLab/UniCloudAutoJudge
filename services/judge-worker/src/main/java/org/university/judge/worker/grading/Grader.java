@@ -62,12 +62,14 @@ public class Grader {
             sandbox.prepare(directory);
             Files.writeString(directory.resolve(plan.sourceFileName()), job.source() == null ? "" : job.source(),
                     StandardCharsets.UTF_8);
+            for (var file : plan.supportFiles().entrySet()) {
+                Files.writeString(directory.resolve(file.getKey()), file.getValue(), StandardCharsets.UTF_8);
+            }
 
             if (!plan.compileCommand().isEmpty()) {
                 RunResult compilation = sandbox.run(new RunRequest(language.image(), directory, true, plan.compileCommand(),
                         "", limits.compileTimeLimit().toMillis(), limits.compileMemoryMb()));
-                if (compilation.outcome() == RunResult.Outcome.SANDBOX_ERROR || compilation.exitCode() == 126
-                        || compilation.exitCode() == 127) {
+                if (compilation.outcome() == RunResult.Outcome.SANDBOX_ERROR) {
                     throw new SandboxException("Compiler could not be started: " + firstLine(compilation.stderr()));
                 }
                 if (compilation.outcome() != RunResult.Outcome.COMPLETED || compilation.exitCode() != 0) {
@@ -99,7 +101,7 @@ public class Grader {
             case TIME_LIMIT -> Verdict.TIME_LIMIT_EXCEEDED;
             case MEMORY_LIMIT -> Verdict.MEMORY_LIMIT_EXCEEDED;
             // The API has no output-limit verdict; flooding stdout is reported as a runtime error.
-            case OUTPUT_LIMIT -> Verdict.RUNTIME_ERROR;
+            case OUTPUT_LIMIT, WORKSPACE_LIMIT -> Verdict.RUNTIME_ERROR;
             case COMPLETED -> {
                 if (run.exitCode() != 0) {
                     yield language.ranOutOfMemory(run.stderr()) ? Verdict.MEMORY_LIMIT_EXCEEDED : Verdict.RUNTIME_ERROR;
@@ -136,7 +138,10 @@ public class Grader {
     private static void delete(Path directory) {
         if (directory == null) return;
         try (Stream<Path> files = Files.walk(directory)) {
-            files.sorted(Comparator.reverseOrder()).forEach(path -> path.toFile().delete());
+            files.sorted(Comparator.reverseOrder()).forEach(path -> {
+                try { Files.deleteIfExists(path); }
+                catch (IOException e) { throw new UncheckedIOException(e); }
+            });
         } catch (IOException | UncheckedIOException e) {
             LOG.warn("Could not remove work directory {}: {}", directory, e.getMessage());
         }

@@ -125,6 +125,18 @@ public class WorkerLoop implements SmartLifecycle {
     }
 
     void handle(QueuedEvent event) {
+        Thread renewal = Thread.ofVirtual().name("judge-queue-heartbeat").start(() -> {
+            while (!Thread.currentThread().isInterrupted()) {
+                try {
+                    Thread.sleep(Math.max(1, properties.reclaimIdle().toMillis() / 3));
+                    queue.touch(event);
+                } catch (InterruptedException stopped) {
+                    return;
+                } catch (RuntimeException unavailable) {
+                    LOG.warn("Could not refresh queue record {}: {}", event.recordId(), unavailable.toString());
+                }
+            }
+        });
         try {
             Disposition disposition = processor.process(event);
             switch (disposition.action()) {
@@ -135,6 +147,8 @@ public class WorkerLoop implements SmartLifecycle {
         } catch (RuntimeException e) {
             // Unacknowledged on purpose: the record stays pending and is retried.
             LOG.error("Record {} left pending after an unexpected error: {}", event.recordId(), e.toString());
+        } finally {
+            renewal.interrupt();
         }
     }
 

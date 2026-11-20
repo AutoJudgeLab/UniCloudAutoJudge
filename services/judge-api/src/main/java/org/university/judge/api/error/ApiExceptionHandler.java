@@ -2,7 +2,9 @@ package org.university.judge.api.error;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+
 import jakarta.servlet.http.HttpServletRequest;
+
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -25,6 +27,21 @@ import org.university.judge.storage.StorageException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+    @ExceptionHandler(org.university.judge.api.worker.WorkerTransportException.class)
+    ResponseEntity<ProblemDetail> worker(org.university.judge.api.worker.WorkerTransportException exception, HttpServletRequest request) {
+        return response(ApiProblems.create(exception.status(), exception.code(), exception.getMessage(), request.getRequestURI()));
+    }
+
+    @ExceptionHandler(org.university.judge.api.result.application.EvaluationConflictException.class)
+    ResponseEntity<ProblemDetail> evaluation(org.university.judge.api.result.application.EvaluationConflictException exception,
+                                             HttpServletRequest request) {
+        boolean invalid = exception instanceof org.university.judge.api.result.application.EvaluationValidationException;
+        return response(ApiProblems.create(invalid ? HttpStatus.UNPROCESSABLE_ENTITY : HttpStatus.CONFLICT,
+                invalid ? "INVALID_EVALUATION_REPORT" : "EVALUATION_CONFLICT",
+                invalid ? "Evaluation report does not match the sealed tests" : "Evaluation attempt or result conflicts with stored state",
+                request.getRequestURI()));
+    }
+
     @ExceptionHandler(SubmissionException.class)
     ResponseEntity<ProblemDetail> submission(SubmissionException exception, HttpServletRequest request) {
         HttpStatus status = switch (exception.getCode()) {

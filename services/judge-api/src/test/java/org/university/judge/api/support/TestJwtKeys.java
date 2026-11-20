@@ -30,7 +30,11 @@ public final class TestJwtKeys {
             String prefix = "--storage.s3." + entry.getKey() + "=";
             if (arguments.stream().noneMatch(argument -> argument.startsWith(prefix))) arguments.add(prefix + entry.getValue());
         }
+        // Business suites isolate authentication from shared IP counters and Redis outages.
+        // AuthRateLimitIT explicitly enables the real limiter with its own Redis instance.
         for (var entry : java.util.Map.of("outbox.enabled", "false", "management.health.s3.enabled", "false",
+                "security.authentication-mode", "local",
+                "security.rate-limit.enabled", "false", "worker.transport.enabled", "false",
                 "management.endpoint.health.group.readiness.include", "readinessState,db",
                 "management.endpoint.health.group.dependencies.include", "db").entrySet()) {
             String prefix = "--" + entry.getKey() + "=";

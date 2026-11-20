@@ -21,8 +21,7 @@ import org.university.judge.worker.model.TestOutcome;
 /**
  * HTTP implementation of the worker transport specified in docs/worker-transport.md.
  *
- * <p>PROPOSED CONTRACT: judge-api does not expose these routes yet. Until they exist every begin call
- * fails and deliveries stay pending in Redis, which is safe but evaluates nothing.
+ * The API authenticates a separate evaluator credential, returns the sealed job and persists results.
  */
 @Component
 public class HttpJudgeApiClient implements JudgeApiClient {
@@ -80,6 +79,20 @@ public class HttpJudgeApiClient implements JudgeApiClient {
             throw new ApiException("Interrupted while calling the API", e);
         }
     }
+
+    @Override
+    public long heartbeat(UUID submissionId, UUID attemptId) {
+        var response = post("/internal/worker/v1/submissions/" + submissionId + "/attempts/" + attemptId + "/heartbeat", Map.of());
+        if (response.statusCode() == 409 || response.statusCode() == 404) {
+            throw new StaleAttemptException("Evaluation lease no longer belongs to this attempt");
+        }
+        if (response.statusCode() != 200) throw new ApiException("Heartbeat failed with HTTP " + response.statusCode());
+        long millis = Json.read(response.body(), LeaseResponse.class).leaseMillis();
+        if (millis < 1) throw new ApiException("Invalid evaluation lease duration");
+        return millis;
+    }
+
+    record LeaseResponse(long leaseMillis) { }
 
     record BeginRequest(UUID attemptId, UUID eventId) { }
 

@@ -12,7 +12,7 @@ public interface SubmissionQueue {
 
     /**
      * Takes over deliveries that were never acknowledged, typically because a worker died mid-evaluation.
-     * Records that already used up their deliveries are moved to the dead-letter stream instead.
+     * The processor decides whether a grading failure has exhausted its retries.
      *
      * @param inFlight record IDs this process is still working on; they are left alone
      */
@@ -20,6 +20,9 @@ public interface SubmissionQueue {
 
     /** Call only after the outcome is durable in the API. */
     void acknowledge(QueuedEvent event);
+
+    /** Refresh idle time only while this consumer still owns the pending record. */
+    void touch(QueuedEvent event);
 
     /** Parks a record for an operator and stops redelivering it. Nothing is ever dropped silently. */
     void deadLetter(QueuedEvent event, String reason);

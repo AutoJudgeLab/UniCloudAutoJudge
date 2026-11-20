@@ -1,6 +1,7 @@
 package org.university.judge.api.error;
 
 import java.net.URI;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 

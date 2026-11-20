@@ -64,8 +64,10 @@ startedAt, completedAt, and attemptCount. Legacy rows may have a null sourceSize
 | CSHARP | cs |
 
 Language values are case-sensitive. Extensions are case-insensitive and must also
-be enabled by `S3_ALLOWED_EXTENSIONS`. This is an acceptance format list, not a
-promise that evaluators for those languages exist yet.
+be enabled by `S3_ALLOWED_EXTENSIONS`. The worker now has enabled evaluators for all
+ten formats; see [toolchain versions and restrictions](../services/judge-worker/README.md#supported-languages).
+Acceptance still only stores source and publishes an event. Real grading requires prepared Docker
+images and the [worker/API transport](worker-transport.md) enabled with its separate service credential.
 
 [Storage validation](storage.md) requires nonempty UTF-8 source text, a safe
 filename, and a positive size within S3_MAX_UPLOAD_SIZE. Client MIME types are
@@ -193,5 +195,6 @@ crossings, concurrent idempotency, source and outbox persistence, account/gradin
 changes during upload, database rollback, lost PUT acknowledgements, and cleanup
 of late objects without removing active/accepted sources.
 
-[Stage 9](evaluation-results.md) implements result retrieval and leaderboards. Automatic
-execution, worker behavior, and source-download endpoints remain deferred. Stage 10 implements Redis outbox publishing.
+[Stage 9](evaluation-results.md) implements result retrieval and leaderboards. Redis
+outbox publishing and [automatic worker evaluation](worker-transport.md) are implemented.
+Source is supplied through the protected worker job, without a public download endpoint.

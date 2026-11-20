@@ -1,5 +1,6 @@
 package org.university.judge.api.auth;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -13,6 +14,7 @@ import org.university.judge.api.user.UserRepository;
 import org.university.judge.api.user.UserResponse;
 
 @Service
+@ConditionalOnProperty(name = "security.authentication-mode", havingValue = "local", matchIfMissing = true)
 public class AuthenticationService {
     private final UserRepository users;
     private final PasswordEncoder passwords;
@@ -47,8 +49,8 @@ public class AuthenticationService {
         if (request.password().getBytes(StandardCharsets.UTF_8).length > 72) {
             throw new BadCredentialsException("Invalid credentials");
         }
-        boolean matches = passwords.matches(request.password(), user == null ? dummyPasswordHash : user.getPasswordHash());
-        if (!matches || user == null || !user.isEnabled()) {
+        boolean matches = passwords.matches(request.password(), user == null || user.isExternal() ? dummyPasswordHash : user.getPasswordHash());
+        if (!matches || user == null || user.isExternal() || !user.isEnabled()) {
             throw new BadCredentialsException("Invalid credentials");
         }
         return tokens.issue(user);

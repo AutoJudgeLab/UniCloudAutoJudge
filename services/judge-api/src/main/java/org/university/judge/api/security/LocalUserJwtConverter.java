@@ -1,5 +1,6 @@
 package org.university.judge.api.security;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.core.convert.converter.Converter;
@@ -15,6 +16,7 @@ import org.university.judge.api.user.User;
 import org.university.judge.api.user.UserRepository;
 
 @Component
+@ConditionalOnProperty(name = "security.authentication-mode", havingValue = "local", matchIfMissing = true)
 public class LocalUserJwtConverter implements Converter<Jwt, AbstractAuthenticationToken> {
     private final UserRepository users;
 
@@ -34,7 +36,7 @@ public class LocalUserJwtConverter implements Converter<Jwt, AbstractAuthenticat
         } catch (IllegalArgumentException | NullPointerException ignored) {
             throw invalidToken();
         }
-        User user = users.findById(id).filter(User::isEnabled).orElseThrow(LocalUserJwtConverter::invalidToken);
+        User user = users.findById(id).filter(candidate -> candidate.isEnabled() && !candidate.isExternal()).orElseThrow(LocalUserJwtConverter::invalidToken);
         Object version = jwt.getClaim("token_version");
         if (!(version instanceof Long || version instanceof Integer)
                 || ((Number) version).longValue() != user.getTokenVersion()) {

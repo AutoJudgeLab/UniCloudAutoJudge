@@ -38,6 +38,12 @@ public class Submission implements Persistable<UUID> {
     @Column(name = "evaluation_fingerprint", length = 64)
     private String evaluationFingerprint;
 
+    @Column(name = "evaluation_lease_until")
+    private Instant evaluationLeaseUntil;
+
+    public Instant getEvaluationLeaseUntil() { return evaluationLeaseUntil; }
+    public void renewEvaluationLease(Instant until) { evaluationLeaseUntil = until; }
+
     public long getVersion() { return version; }
     public UUID getEvaluationAttemptId() { return evaluationAttemptId; }
     public String getEvaluationFingerprint() { return evaluationFingerprint; }
@@ -53,6 +59,7 @@ public class Submission implements Persistable<UUID> {
         evaluationFingerprint = fingerprint;
         status = SubmissionStatus.COMPLETED;
         completedAt = now;
+        evaluationLeaseUntil = null;
     }
     @Id
     @Column(nullable = false, updatable = false)

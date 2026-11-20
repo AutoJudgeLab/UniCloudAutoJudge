@@ -85,11 +85,22 @@ public class SubmissionProcessor {
         }
 
         JudgeJob job = begin.job();
+        try (var heartbeat = new AttemptHeartbeat(api, job)) {
+            return evaluate(event, job);
+        } catch (RuntimeException unavailable) {
+            LOG.warn("Attempt {} stopped: {}", job.attemptId(), unavailable.toString());
+            return Disposition.retryLater();
+        }
+    }
+
+    private Disposition evaluate(QueuedEvent event, JudgeJob job) {
+        UUID submissionId = job.submissionId();
         long started = System.nanoTime();
         EvaluationReport report;
         try {
             report = grader.grade(job);
         } catch (RuntimeException failure) {
+            if (Thread.currentThread().isInterrupted()) return Disposition.retryLater();
             if (event.deliveryCount() < maxDeliveries) {
                 LOG.warn("Evaluation of submission {} failed on delivery {}: {}", submissionId, event.deliveryCount(),
                         failure.toString());
@@ -100,26 +111,33 @@ public class SubmissionProcessor {
             report = EvaluationReport.internalError(job);
         }
 
-        Disposition stored = store(report);
+        if (Thread.currentThread().isInterrupted()) return Disposition.retryLater();
+        Disposition stored = store(report, job);
         if (stored.action() == Disposition.Action.ACKNOWLEDGE) {
-            LOG.info("Submission {} evaluated: verdict={} score={} passed={}/{} gradingMs={}", submissionId,
-                    report.verdict(), report.totalScore().toPlainString(), report.passedTests(), report.totalTests(),
+            LOG.info("Submission {} result stored; gradingMs={}", submissionId,
                     (System.nanoTime() - started) / 1_000_000);
         }
         return stored;
     }
 
     /** A lost response is retried in place: the API treats an identical report for the same attempt as a replay. */
-    private Disposition store(EvaluationReport report) {
+    private Disposition store(EvaluationReport report, JudgeJob job) {
         for (int attempt = 1; ; attempt++) {
             try {
                 api.complete(report);
                 return Disposition.acknowledge();
             } catch (StaleAttemptException replaced) {
                 LOG.info("Attempt {} was replaced; its result is dropped", report.attemptId());
-                return Disposition.acknowledge();
+                // This record may now belong to a replacement worker. An ACK here would erase its
+                // recovery path before it stores a result. A later begin can confirm completion.
+                return Disposition.retryLater();
             } catch (PermanentApiException rejected) {
                 LOG.error("API rejected the result of submission {}: {}", report.submissionId(), rejected.getMessage());
+                if (report.verdict() != org.university.judge.worker.grading.Verdict.INTERNAL_ERROR) {
+                    // A malformed grading report must not strand the student in RUNNING. The API
+                    // still fences this minimal failure report by the same attempt identity.
+                    return store(EvaluationReport.internalError(job), job);
+                }
                 return Disposition.deadLetter("RESULT_REJECTED");
             } catch (ApiException unavailable) {
                 if (attempt >= RESULT_UPLOAD_TRIES) {
