@@ -1,5 +1,6 @@
 package org.university.judge.api.security;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -13,6 +14,7 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 
 @Configuration(proxyBeanMethods = false)
 @EnableMethodSecurity
+@ConditionalOnProperty(name = "security.authentication-mode", havingValue = "local", matchIfMissing = true)
 public class SecurityConfiguration {
 
     @Bean

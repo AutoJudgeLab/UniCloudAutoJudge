@@ -1,5 +1,10 @@
 # Authentication and authorization
 
+Select AUTHENTICATION_MODE=local (default) or portal. This page describes local
+mode. The implemented UniCloud OIDC integration, cookie/CSRF flow, identity migration
+and direct module-to-API proposal are in [Portal SSO](portal-sso.md). Portal mode
+disables local registration/login, password services and RSA signing keys.
+
 Stage 3 adds local registration/login and a Spring Security OAuth2 resource-server
 boundary. Access tokens use RS256 through Spring Security's Nimbus JWT encoder and
 decoder. Passwords use BCrypt with cost 12. Stage 4 adds
@@ -9,7 +14,7 @@ not implemented.
 
 ## Signing keys and startup
 
-The API now requires a matching RSA key pair supplied through environment variables:
+Local authentication mode requires a matching RSA key pair supplied through environment variables:
 
 | Variable | Meaning |
 | --- | --- |
@@ -118,13 +123,15 @@ validation constraints, and endpoint error responses.
 
 ## Authorization boundary
 
+Login and registration also have [Redis rate limits](#login-and-registration-rate-limits).
+
 Health/documentation GET routes and registration/login POST routes are public.
 Other `/api/**` routes require authentication. The `/api/admin/**` namespace
 requires ADMIN; `/api/teacher/**` accepts TEACHER or ADMIN. Stage 4 provides the
 `/api/admin/users` endpoints. Method-level security also protects the administration
 service. Stage 5 adds role checks and assignment ownership enforcement in
 `AssignmentService`; see [Assignment management](assignments.md). Submission
-authorization remains deferred.
+authorization is enforced by ownership and role checks; see [submissions](submissions.md).
 
 The decoder pins RS256 and validates signature, issuer, audience, expiration, and
 issued-at time, allowing 30 seconds of clock skew. Tokens must have both `exp` and
@@ -142,14 +149,10 @@ claim and require a fresh login. The filter chain uses stateless bearer-header
 authentication, with form login, HTTP Basic, logout/session handling, and CSRF
 disabled. CSRF is disabled because credentials are not accepted from cookies.
 
-Business code depends on `CurrentUser` and the `AuthenticatedUser` identity, not
-JWT claims, password verification, or `AuthenticationService`. To adopt an external
-authentication service later, replace local token issuance/controllers and the
-decoder configuration with the provider's supported issuer/JWKS configuration.
-Adapt the subject-to-local-user mapping in the authentication boundary if needed;
-assignment/submission services can continue using the same local UUID and roles.
-Retain the local account-status and authentication-version revocation checks.
-No external-service adapter is implemented in this stage.
+Business code depends on CurrentUser and AuthenticatedUser, not provider-specific claims.
+The [Portal adapter](portal-sso.md) maps issuer/subject to the same application UUID boundary.
+Local tokens cannot authenticate external accounts; Portal mode accepts only its configured issuer.
+Both modes retain local account-status checks and the separate worker authentication chain.
 
 ## Initial administrator
 
@@ -166,7 +169,7 @@ Supply your own values before starting the API. The username, email, and passwor
 must satisfy the registration policy. There are no default credentials.
 
 The startup runner invokes a transactional bootstrap service. A PostgreSQL advisory
-lock serializes concurrent instances. If any administrator already exists, bootstrap
+lock serializes concurrent instances. If any local administrator already exists, bootstrap
 is a no-op: it never resets a password, promotes another account, changes the
 existing identity, or re-enables a disabled administrator. Otherwise it validates
 configuration and creates exactly one enabled ADMIN with a BCrypt hash. A username
@@ -205,7 +208,34 @@ current-user identity, Problem Details, OpenAPI, bootstrap creation/idempotency/
 collisions/concurrency, and last-admin protection. Existing persistence, history,
 and health tests remain included.
 
-Refresh tokens, password reset, email verification, login throttling, key rotation
-with overlapping validation keys, external-auth integration, additional ADMIN
+Refresh tokens, password reset, email verification, key rotation
+with overlapping validation keys, additional ADMIN
 provisioning are deferred. Stage 8 implements [submission authorization](submissions.md). Worker functionality
-remains unimplemented.
+uses a separate scoped service credential; local JWTs never grant evaluation rights.
+
+## Login and registration rate limits
+
+Redis-backed limits are enabled by default and shared across API instances:
+
+| Variable | Default |
+| --- | --- |
+| `AUTH_RATE_LIMIT_ENABLED` | `true` |
+| `AUTH_LOGIN_LIMIT` | 5 requests per address per window |
+| `AUTH_REGISTER_LIMIT` | 3 requests per address per window |
+| `AUTH_RATE_LIMIT_WINDOW` | `1m` (1 second–1 hour) |
+
+Counters are independent for login and registration and include invalid requests. Atomic Lua increments
+and expiry prevent concurrency bypasses. Limited requests return `429 RATE_LIMIT_EXCEEDED` with the
+remaining `Retry-After` seconds. Redis failures return `503 RATE_LIMIT_SERVICE_UNAVAILABLE`; restoring
+Redis restores authentication without an API restart. Existing JWT-authenticated requests and worker
+endpoints do not use these counters.
+
+The filter matches decoded servlet paths, including deployments under a context path. Client identity
+uses `getRemoteAddr()` and does not trust arbitrary `X-Forwarded-For`. Configure trusted proxies at the
+server/ingress boundary and choose thresholds suitable for shared university/NAT addresses.
+
+Business integration suites explicitly disable the limiter so they do not share IP budgets or require
+Redis. `AuthRateLimitIT` enables it with isolated Redis and checks registration/login/profile,
+concurrent requests, independent limits, expiry and spoofed forwarding headers. Unit tests cover
+fail-closed behavior and encoded/context paths. Worker authentication uses its own credential and
+filter chain; see [worker transport](worker-transport.md).

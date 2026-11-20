@@ -35,7 +35,7 @@ class GraderTest {
     }
 
     private static boolean compiling(RunRequest request) {
-        return request.command().get(0).equals("javac");
+        return request.workDirWritable();
     }
 
     private static RunResult ok(String stdout) {
@@ -120,7 +120,7 @@ class GraderTest {
         RunRequest run = requests.get(1);
         assertTrue(compile.workDirWritable());
         assertTrue(!run.workDirWritable());
-        assertTrue(run.command().contains("-Xmx256m"));
+        assertTrue(String.join(" ", run.command()).contains("-Xmx256m"));
         assertEquals(256 + 160, run.memoryMb());
         assertEquals(2000, run.timeLimitMillis());
     }
@@ -134,7 +134,7 @@ class GraderTest {
 
     @Test
     void languageWithoutEvaluatorEndsAsInternalError() {
-        JudgeJob job = Fixtures.job("RUST", "main.rs", "fn main() {}", Fixtures.test(0, "", "1", "10"));
+        JudgeJob job = Fixtures.job("UNKNOWN", "main.txt", "unknown", Fixtures.test(0, "", "1", "10"));
         EvaluationReport report = accepted(grader(r -> ok("")).grade(job), job);
         assertEquals(Verdict.INTERNAL_ERROR, report.verdict());
         assertTrue(requests.isEmpty());

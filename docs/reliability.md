@@ -21,7 +21,7 @@ API instances skip each other's locked rows. No distributed transaction exists.
 | API crashes before publication | Durable event remains due after restart |
 | Unknown event type/version or malformed IDs | Retain with INVALID_EVENT and capped backoff; alert and fix, never silently discard |
 | MinIO/database fails during acceptance | No acknowledged submission; same-key retry and durable cleanup reconcile partial writes |
-| Redis persistence lost or stream trimmed | Retained PostgreSQL events permit operator replay; not automatic Redis reconstruction |
+| Redis persistence lost or stream trimmed | Periodic reconciliation republishes unfinished events; consumer groups are recreated |
 
 Backoff starts at 1 s and doubles to a 5 minute cap; retries are indefinite, not
 a finite silent-drop policy. attempt_count counts committed delivery attempts.
@@ -63,9 +63,20 @@ Example (PG connection credentials come from a protected operator environment):
     psql -v since='2026-11-01T00:00:00Z' -v before='2026-11-02T00:00:00Z' -v batch_size=100 -f infrastructure/operations/replay-outbox.sql
     psql -v since='2026-11-01T00:00:00Z' -v before='2026-11-02T00:00:00Z' -v batch_size=100 -v apply=true -f infrastructure/operations/replay-outbox.sql
 
-The script targets published SUBMISSION_CREATED events for PENDING submissions.
-RUNNING jobs require worker lease/recovery design and operator investigation, not
-blind requeue. There is no public replay endpoint or worker lease automation yet.
+The script targets PENDING submissions and RUNNING submissions whose persisted
+evaluation_lease_until has expired. It locks submissions and outbox rows, skips
+locked rows and never resets business state. With worker transport enabled, the
+API also reconciles up to 100 such events every minute once their publication is
+older than five minutes. The interval is configurable through
+worker.recovery.interval; worker.recovery.minimum-age defaults to five minutes.
+Publication uses the original event ID. This can
+duplicate an intact but slow delivery; begin/complete deduplication makes it safe.
+Live attempts renew their API lease and Redis idle time. Renewal is fenced by
+attempt ID; queue renewal/dead-letter operations also check consumer ownership.
+Pending scans use a cursor so the oldest 100 records cannot starve later records.
+Rejected result reports attempt a minimal INTERNAL_ERROR completion before DLQ.
+Permanently invalid events and a missing/corrupt source still require operator
+investigation; reconciliation cannot reconstruct a lost source file.
 A complete database loss requires backup restore; Redis is not a database backup.
 
 ## Durability and observability

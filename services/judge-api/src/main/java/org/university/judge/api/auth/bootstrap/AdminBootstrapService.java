@@ -1,5 +1,6 @@
 package org.university.judge.api.auth.bootstrap;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import jakarta.validation.Validator;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -11,6 +12,7 @@ import org.university.judge.api.user.User;
 import org.university.judge.api.user.UserRepository;
 
 @Service
+@ConditionalOnProperty(name = "security.authentication-mode", havingValue = "local", matchIfMissing = true)
 public class AdminBootstrapService {
     private final AdminBootstrapSettings settings;
     private final UserRepository users;

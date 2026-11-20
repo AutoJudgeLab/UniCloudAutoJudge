@@ -44,6 +44,15 @@ spring:
         enabled: ${REDIS_SSL_ENABLED:false}
 
 server:
+  servlet:
+    session:
+      timeout: 30m
+      cookie:
+        name: JUDGE_SESSION
+        http-only: true
+        secure: true
+        same-site: lax
+        path: /
   port: ${SERVER_PORT:8080}
   error:
     include-message: never
@@ -92,6 +101,19 @@ springdoc:
     enabled: ${OPENAPI_ENABLED:true}
 
 security:
+  authentication-mode: ${AUTHENTICATION_MODE:local}
+  portal:
+    issuer: ${PORTAL_ISSUER:https://unicloud-portal-staging.onrender.com}
+    client-id: ${PORTAL_CLIENT_ID:}
+    client-secret: ${PORTAL_CLIENT_SECRET:}
+    redirect-uri: ${PORTAL_REDIRECT_URI:http://localhost:8080/login/oauth2/code/portal}
+    admin-subjects: ${PORTAL_ADMIN_SUBJECTS:}
+    request-timeout: ${PORTAL_REQUEST_TIMEOUT:10s}
+  rate-limit:
+    enabled: ${AUTH_RATE_LIMIT_ENABLED:true}
+    login-limit: ${AUTH_LOGIN_LIMIT:5}
+    register-limit: ${AUTH_REGISTER_LIMIT:3}
+    window: ${AUTH_RATE_LIMIT_WINDOW:1m}
   jwt:
     private-key-base64: ${JWT_PRIVATE_KEY_BASE64:}
     public-key-base64: ${JWT_PUBLIC_KEY_BASE64:}
@@ -103,6 +125,15 @@ security:
     username: ${ADMIN_BOOTSTRAP_USERNAME:}
     email: ${ADMIN_BOOTSTRAP_EMAIL:}
     password: ${ADMIN_BOOTSTRAP_PASSWORD:}
+
+worker:
+  recovery:
+    interval: ${WORKER_RECOVERY_INTERVAL:PT1M}
+    minimum-age: ${WORKER_RECOVERY_MINIMUM_AGE:5m}
+  transport:
+    enabled: ${WORKER_TRANSPORT_ENABLED:false}
+    token: ${JUDGE_WORKER_TOKEN:}
+    attempt-lease: ${WORKER_ATTEMPT_LEASE:4m}
 
 
 outbox:

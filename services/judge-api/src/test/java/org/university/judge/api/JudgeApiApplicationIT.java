@@ -61,7 +61,7 @@ class JudgeApiApplicationIT {
     void applicationStartsWithMigratedPostgresAndReachableRedis() {
         assertThat(context.getBean(org.university.judge.storage.ObjectStorageService.class)).isNotNull();
         Flyway flyway = context.getBean(Flyway.class);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("10");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("12");
         assertThat(flyway.info().pending()).isEmpty();
         StringRedisTemplate redis = context.getBean(StringRedisTemplate.class);
         assertThat(redis.execute((RedisCallback<String>) connection -> connection.ping())).isEqualTo("PONG");

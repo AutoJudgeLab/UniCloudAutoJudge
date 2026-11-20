@@ -28,10 +28,6 @@ public class DockerSandboxRunner implements SandboxRunner {
 
     private static final Logger LOG = LoggerFactory.getLogger(DockerSandboxRunner.class);
     private static final int STDERR_LIMIT = 64 * 1024;
-    /** docker run's own failure code: daemon unreachable, unknown image, bad flag... */
-    private static final int DOCKER_FAILURE = 125;
-    /** 128 + SIGKILL; without our own kill this is the kernel OOM killer enforcing --memory. */
-    private static final int KILLED = 137;
     private static final long MANAGEMENT_TIMEOUT_SECONDS = 10;
 
     private static final String NOBODY = "65534:65534";
@@ -78,6 +74,17 @@ public class DockerSandboxRunner implements SandboxRunner {
     @Override
     public RunResult run(RunRequest request) {
         String name = "judge-" + UUID.randomUUID();
+        try {
+            return execute(name, request);
+        } finally {
+            // Cleanup must also run when the grading thread is interrupted during shutdown.
+            boolean interrupted = Thread.interrupted();
+            if (!docker("rm", "-f", name)) LOG.debug("Container {} already absent or removal failed", name);
+            if (interrupted) Thread.currentThread().interrupt();
+        }
+    }
+
+    private RunResult execute(String name, RunRequest request) {
         long started = System.nanoTime();
         Process process;
         try {
@@ -101,8 +108,15 @@ public class DockerSandboxRunner implements SandboxRunner {
         long deadline = started + TimeUnit.MILLISECONDS.toNanos(request.timeLimitMillis() + sandbox.startupGrace().toMillis());
         boolean finished = false;
         boolean outputLimit = false;
+        boolean workspaceLimit = false;
+        long nextWorkspaceCheck = started;
         try {
             while (!finished) {
+                if (request.workDirWritable() && System.nanoTime() >= nextWorkspaceCheck) {
+                    workspaceLimit = workspaceExceeded(request.workDir());
+                    if (workspaceLimit) break;
+                    nextWorkspaceCheck = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(100);
+                }
                 if (out.overflowed()) {
                     outputLimit = true;
                     break;
@@ -115,19 +129,30 @@ public class DockerSandboxRunner implements SandboxRunner {
             kill(name, process);
             return RunResult.sandboxError("Interrupted while waiting for the sandbox");
         }
+        long elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
         if (!finished) kill(name, process);
         join(outReader);
         join(errReader);
         join(stdinWriter);
 
-        long elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
         int exit = finished ? process.exitValue() : -1;
         Outcome outcome;
-        if (outputLimit || (finished && out.overflowed())) outcome = Outcome.OUTPUT_LIMIT;
+        if (workspaceLimit || (request.workDirWritable() && workspaceExceeded(request.workDir()))) outcome = Outcome.WORKSPACE_LIMIT;
+        else if (outputLimit || (finished && out.overflowed())) outcome = Outcome.OUTPUT_LIMIT;
         else if (!finished) outcome = Outcome.TIME_LIMIT;
-        else if (exit == DOCKER_FAILURE) outcome = Outcome.SANDBOX_ERROR;
-        else if (exit == KILLED) outcome = Outcome.MEMORY_LIMIT;
-        else outcome = Outcome.COMPLETED;
+        else {
+            ContainerState state = inspect(name);
+            if (state == null || !state.status().equals("exited") || state.startFailed()) {
+                outcome = Outcome.SANDBOX_ERROR;
+            } else {
+                exit = state.exitCode();
+                // Docker daemon timestamps use wall time and can jump when a VM resumes or
+                // its clock is adjusted. They cannot exceed the locally observed monotonic run.
+                if (state.elapsedMillis() > 0 && state.elapsedMillis() <= elapsed) elapsed = state.elapsedMillis();
+                outcome = state.oomKilled() ? Outcome.MEMORY_LIMIT
+                        : elapsed > request.timeLimitMillis() ? Outcome.TIME_LIMIT : Outcome.COMPLETED;
+            }
+        }
         return new RunResult(outcome, exit, out.text(), err.text(), elapsed);
     }
 
@@ -135,13 +160,15 @@ public class DockerSandboxRunner implements SandboxRunner {
         String mount = "type=bind,source=" + request.workDir().toAbsolutePath() + ",target=/work"
                 + (request.workDirWritable() ? "" : ",readonly");
         List<String> command = new ArrayList<>(List.of(
-                sandbox.dockerBinary(), "run", "--rm", "-i",
+                sandbox.dockerBinary(), "run", "--pull", "never", "-i",
                 "--name", name,
                 "--network", "none",
                 "--memory", request.memoryMb() + "m",
                 "--memory-swap", request.memoryMb() + "m",
                 "--cpus", String.valueOf(sandbox.cpus()),
                 "--pids-limit", String.valueOf(sandbox.pidsLimit()),
+                "--ulimit", "fsize=" + sandbox.workspaceBytes() + ":" + sandbox.workspaceBytes(),
+                "--ulimit", "core=0:0",
                 "--read-only",
                 "--tmpfs", "/tmp:rw,noexec,nosuid,size=" + sandbox.tmpfsMb() + "m",
                 "--cap-drop", "ALL",
@@ -152,6 +179,71 @@ public class DockerSandboxRunner implements SandboxRunner {
                 request.image()));
         command.addAll(request.command());
         return command;
+    }
+
+    private boolean workspaceExceeded(Path directory) {
+        class Budget extends java.nio.file.SimpleFileVisitor<Path> {
+            long bytes;
+            int entries;
+            boolean exceeded;
+            private java.nio.file.FileVisitResult count(java.nio.file.attribute.BasicFileAttributes attributes) {
+                exceeded = ++entries > sandbox.workspaceFiles()
+                        || (attributes.isRegularFile() && attributes.size() > sandbox.workspaceBytes() - bytes);
+                if (exceeded) return java.nio.file.FileVisitResult.TERMINATE;
+                if (attributes.isRegularFile()) bytes += attributes.size();
+                return java.nio.file.FileVisitResult.CONTINUE;
+            }
+            @Override public java.nio.file.FileVisitResult preVisitDirectory(Path path,
+                    java.nio.file.attribute.BasicFileAttributes attributes) { return count(attributes); }
+            @Override public java.nio.file.FileVisitResult visitFile(Path path,
+                    java.nio.file.attribute.BasicFileAttributes attributes) { return count(attributes); }
+            @Override public java.nio.file.FileVisitResult visitFileFailed(Path path, IOException failure) throws IOException {
+                // Compilers (notably Go) remove intermediate directories during a scan.
+                if (!(failure instanceof java.nio.file.NoSuchFileException)) throw failure;
+                return java.nio.file.FileVisitResult.CONTINUE;
+            }
+            @Override public java.nio.file.FileVisitResult postVisitDirectory(Path path, IOException failure) throws IOException {
+                if (failure != null && !(failure instanceof java.nio.file.NoSuchFileException)) throw failure;
+                return java.nio.file.FileVisitResult.CONTINUE;
+            }
+        }
+        var budget = new Budget();
+        try {
+            Files.walkFileTree(directory, budget);
+            return budget.exceeded;
+        } catch (IOException inaccessible) {
+            // A filesystem failure is infrastructure trouble, not proof of excessive output.
+            throw new java.io.UncheckedIOException("Could not account for compiler workspace", inaccessible);
+        }
+    }
+
+    private record ContainerState(String status, int exitCode, boolean oomKilled,
+            boolean startFailed, long elapsedMillis) { }
+
+    private ContainerState inspect(String name) {
+        try {
+            Process process = new ProcessBuilder(sandbox.dockerBinary(), "inspect", "--format",
+                    "{{.State.Status}}|{{.State.ExitCode}}|{{.State.OOMKilled}}|{{.State.StartedAt}}|{{.State.FinishedAt}}|{{if .State.Error}}error{{else}}ok{{end}}",
+                    name).redirectError(ProcessBuilder.Redirect.DISCARD).start();
+            var capture = new BoundedCapture(process.getInputStream(), 4096);
+            Thread reader = Thread.ofVirtual().start(capture);
+            if (!process.waitFor(MANAGEMENT_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                join(reader);
+                return null;
+            }
+            join(reader);
+            if (process.exitValue() != 0) return null;
+            String[] state = capture.text().strip().split("\\|", -1);
+            return new ContainerState(state[0], Integer.parseInt(state[1]), Boolean.parseBoolean(state[2]),
+                    !state[5].equals("ok"), Math.max(0, java.time.Duration.between(
+                            java.time.Instant.parse(state[3]), java.time.Instant.parse(state[4])).toMillis()));
+        } catch (IOException | RuntimeException e) {
+            return null;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return null;
+        }
     }
 
     /**

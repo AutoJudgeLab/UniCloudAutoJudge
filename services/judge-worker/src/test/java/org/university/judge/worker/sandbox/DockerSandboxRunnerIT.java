@@ -113,4 +113,52 @@ class DockerSandboxRunnerIT {
         assertNotEquals(Verdict.INTERNAL_ERROR, report.verdict());
         assertTrue(report.tests().size() == 1);
     }
+
+    @Test
+    void compilerWorkspaceStopsGrowingAtTheConfiguredBudget() throws Exception {
+        var base = Fixtures.properties();
+        var properties = new WorkerProperties(base.stream(), base.deadLetterStream(), base.group(), base.consumerName(),
+                base.concurrency(), base.maxDeliveries(), base.blockTimeout(), base.reclaimIdle(), base.shutdownGrace(),
+                base.api(), base.limits(), new WorkerProperties.Sandbox("docker", 1, 128, 64,
+                        java.time.Duration.ofSeconds(3), 1048576, 100), base.languages());
+        var runner = new DockerSandboxRunner(properties);
+        var directory = java.nio.file.Files.createTempDirectory("judge-disk-test-");
+        try {
+            runner.prepare(directory);
+            var result = runner.run(new RunRequest("python:3.13-slim", directory, true,
+                    List.of("python3", "-c", "import pathlib; [pathlib.Path(str(i)).write_bytes(b'x'*600000) for i in range(5)]"),
+                    "", 5000, 128));
+            assertEquals(RunResult.Outcome.WORKSPACE_LIMIT, result.outcome());
+        } finally {
+            try (var files = java.nio.file.Files.walk(directory)) {
+                for (var path : files.sorted(java.util.Comparator.reverseOrder()).toList()) java.nio.file.Files.deleteIfExists(path);
+            }
+        }
+    }
+
+    @Test
+    void removingIntermediateDirectoriesDuringCompilationDoesNotExceedTheBudget() throws Exception {
+        var runner = new DockerSandboxRunner(Fixtures.properties());
+        var directory = java.nio.file.Files.createTempDirectory("judge-changing-workspace-");
+        try {
+            runner.prepare(directory);
+            var result = runner.run(new RunRequest("python:3.13-slim", directory, true, List.of("python3", "-c", """
+                    import pathlib, time
+                    deadline = time.monotonic() + 1
+                    while time.monotonic() < deadline:
+                        path = pathlib.Path('cache/intermediate')
+                        path.mkdir(parents=True)
+                        (path / 'object').write_bytes(b'x' * 100)
+                        (path / 'object').unlink()
+                        path.rmdir()
+                        path.parent.rmdir()
+                    """), "", 5000, 128));
+            assertEquals(RunResult.Outcome.COMPLETED, result.outcome());
+            assertEquals(0, result.exitCode(), result.stderr());
+        } finally {
+            try (var files = java.nio.file.Files.walk(directory)) {
+                for (var path : files.sorted(java.util.Comparator.reverseOrder()).toList()) java.nio.file.Files.deleteIfExists(path);
+            }
+        }
+    }
 }

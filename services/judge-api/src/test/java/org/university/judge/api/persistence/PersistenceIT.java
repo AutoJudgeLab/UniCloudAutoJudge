@@ -110,7 +110,7 @@ class PersistenceIT {
         assertThat(stageOne.migrate().migrationsExecuted).isEqualTo(1);
         Flyway latest = Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .schemas("stage_one_upgrade").defaultSchema("stage_one_upgrade").load();
-        assertThat(latest.migrate().migrationsExecuted).isEqualTo(9);
+        assertThat(latest.migrate().migrationsExecuted).isEqualTo(11);
         latest.validate();
         assertThat(latest.migrate().migrationsExecuted).isZero();
         assertThat(context.getEnvironment().getProperty("spring.jpa.hibernate.ddl-auto")).isEqualTo("validate");
@@ -130,7 +130,7 @@ class PersistenceIT {
                 + "VALUES (?, 'existing-student', 'existing@example.test', 'existing-test-hash', 'STUDENT')", id);
         Flyway upgraded = Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .schemas(schema).defaultSchema(schema).load();
-        assertThat(upgraded.migrate().migrationsExecuted).isEqualTo(6);
+        assertThat(upgraded.migrate().migrationsExecuted).isEqualTo(8);
         upgraded.validate();
         assertThat(jdbc.queryForObject("SELECT password_hash FROM stage_four_upgrade.users WHERE id = ?", String.class, id))
                 .isEqualTo("existing-test-hash");
@@ -342,7 +342,8 @@ class PersistenceIT {
         Fixture f = fixture(true);
         Fixture draft = fixture(false);
         rejected("23514", "UPDATE users SET role = 'ROOT' WHERE id = ?", f.student());
-        rejected("23502", "UPDATE users SET password_hash = NULL WHERE id = ?", f.student());
+        // V11 uses an identity-kind CHECK: only external identities may omit a password.
+        rejected("23514", "UPDATE users SET password_hash = NULL WHERE id = ?", f.student());
         rejected("23514", "UPDATE assignments SET status = 'INVALID' WHERE id = ?", f.assignment());
         rejected("23514", "UPDATE assignments SET maximum_score = -1 WHERE id = ?", f.assignment());
         rejected("23514", "UPDATE assignments SET maximum_score = 'NaN' WHERE id = ?", f.assignment());

@@ -28,6 +28,9 @@ public interface JudgeApiClient {
      */
     void complete(EvaluationReport report);
 
+    /** Renews the current attempt and returns the server's lease duration in milliseconds. */
+    long heartbeat(UUID submissionId, UUID attemptId);
+
     record BeginResult(Status status, JudgeJob job) {
         public enum Status {
             STARTED,

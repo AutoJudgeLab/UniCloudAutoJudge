@@ -65,6 +65,7 @@ public class AdminUserService {
         if (actor.getId().equals(userId)) throw new AccessDeniedException("Users cannot change their own role");
         if (role == null || role == Role.ADMIN) throw new UserManagementException(INVALID_ROLE_CHANGE);
         User target = lockTarget(userId);
+        if (target.isExternal()) throw new AccessDeniedException("Portal roles are managed by the portal");
         if (target.getRole() == Role.ADMIN) throw new UserManagementException(ADMIN_ROLE_PROTECTED);
         target.changeRole(role);
         users.flush();
@@ -75,7 +76,7 @@ public class AdminUserService {
     public UserResponse changeStatus(UUID userId, boolean enabled) {
         lockAndVerifyAdministrator();
         User target = lockTarget(userId);
-        if (!enabled && target.isEnabled() && target.getRole() == Role.ADMIN
+        if (!enabled && !target.isExternal() && target.isEnabled() && target.getRole() == Role.ADMIN
                 && users.countByRoleAndEnabledTrue(Role.ADMIN) <= 1) {
             throw new UserManagementException(LAST_ACTIVE_ADMIN);
         }

@@ -1,5 +1,10 @@
 # University Online Judge
 
+UniCloud Portal integration is available with AUTHENTICATION_MODE=portal.
+See [Portal SSO and inter-module calls](docs/portal-sso.md) for OIDC setup,
+identity migration, session/CSRF usage and the token-exchange proposal.
+Local login remains the default until Portal credentials are configured.
+
 A Java 25 and Spring Boot 4.1.2 platform for programming assignments, submissions,
 and future asynchronous evaluation. The project includes the Maven structure, API
 startup, health endpoints, local infrastructure, and the Stage 2 database schema,
@@ -17,7 +22,7 @@ online-judge/                    # Repository root (directory name is optional)
 ├── services/
 │   ├── pom.xml                 # Service aggregator
 │   ├── judge-api/              # Executable Spring Boot MVC API
-│   └── judge-worker/           # Intentionally empty, ordinary JAR
+│   └── judge-worker/           # Redis consumer and Docker grader for ten languages
 ├── modules/
 │   ├── pom.xml                 # Shared module aggregator
 │   ├── judge-common/           # Future enums, lightweight contracts, utilities
@@ -32,7 +37,7 @@ online-judge/                    # Repository root (directory name is optional)
 All eight reactor projects use group ID `org.university.judge` and version
 `0.1.0-SNAPSHOT`. Dependency versions come from Spring Boot's parent/BOM;
 project-specific overrides live in the root POM. JUnit is pinned to the requested
-JUnit 5 line. Only `judge-api` enables executable repackaging. judge-common remains
+JUnit 5 line. Both `judge-api` and `judge-worker` enable executable repackaging. judge-common remains
 empty. judge-messaging contains a lightweight event contract; judge-storage provides
 the MinIO adapter and validated Spring configuration. API packages
 are organized by feature.
@@ -54,7 +59,7 @@ mvn clean verify
 ```
 
 This builds all modules and runs JUnit 5 health, password-policy and key tests without Docker or
-credentials. Empty JAR warnings for the worker and shared modules are expected.
+credentials. The worker unit tests cover its grading and delivery logic. Empty JAR warnings for judge-common are expected.
 With Docker running, also verify the full application, Flyway migrations, entity
 mappings, database constraints, grading history, PostgreSQL, Redis, Actuator,
 OpenAPI, authentication, administrator user management, assignment lifecycle and
@@ -71,6 +76,8 @@ mvn clean verify -Pintegration-tests
 
 Surefire runs `*Test`; the integration profile enables Failsafe for `*IT`.
 Integration tests use random ports, generated RSA keys and passwords, and do not use `.env`.
+Worker Docker tests require the [language toolchain images](services/judge-worker/README.md#sandbox)
+to be prepared first; they exercise all ten accepted languages.
 
 ## Local development
 
@@ -83,9 +90,9 @@ Fill in the PostgreSQL, Redis, MinIO root, and separate S3 application credentia
 The example deliberately contains no usable passwords. `.env` is ignored by Git.
 Use shell-compatible assignments and quote values containing shell metacharacters.
 
-Before running the API, follow [Authentication and signing-key setup](docs/authentication.md)
-to generate an RSA key pair once and configure the required JWT variables. Bootstrap
-credentials are optional while `ADMIN_BOOTSTRAP_ENABLED=false`.
+Before running the API, configure either [local authentication and signing keys](docs/authentication.md)
+or [Portal SSO](docs/portal-sso.md). Local mode requires an RSA key pair; Portal mode
+requires a registered OIDC client and secret. Bootstrap applies only to local mode.
 
 Run these commands from the repository root:
 
@@ -140,7 +147,8 @@ java -jar services/judge-api/target/judge-api-0.1.0-SNAPSHOT.jar
 The API uses PostgreSQL at startup. Flyway upgrades the original V1 baseline with
 the V2 domain schema, V3 grading-history constraints, V4 authentication invariants,
 V5 token-version invalidation, V6 assignment metadata invariants, V7 test-case publication rules,
-V8 submission acceptance/reconciliation, V9 evaluation completion, and V10 outbox delivery. Hibernate uses
+V8 submission acceptance/reconciliation, V9 evaluation completion, V10 outbox delivery,
+and V11 passwordless Portal identities. Hibernate uses
 `ddl-auto=validate` and never creates or modifies tables. Future schemas must use
 new Flyway migrations. JDBC timestamps
 use UTC, and Open Session in View is disabled. Dependency health includes PostgreSQL,
@@ -165,11 +173,15 @@ exposing details; readiness requires PostgreSQL/MinIO and liveness remains
 available at `/actuator/health/liveness`. OpenAPI is at `/v3/api-docs` and Swagger
 UI at `/swagger-ui/index.html`. Set `OPENAPI_ENABLED=false` to disable documentation.
 
-Health/documentation GET routes and registration/login POST routes are public.
+In local mode, health/documentation GET routes and registration/login POST routes are public.
 Other API routes require a signed bearer JWT. Register at `/api/auth/register`,
 log in at `/api/auth/login`, and retrieve the authenticated profile at `/api/users/me`.
 Roles are checked against current enabled local accounts. The API is stateless,
 with no generated default user, form login, HTTP Basic, or session cookies.
+
+Portal mode replaces credential endpoints with `/oauth2/authorization/portal`.
+It supports protected browser sessions with CSRF and Portal access tokens addressed
+to Judge for backend requests. Worker authentication remains separate in both modes.
 
 See [Authentication and authorization](docs/authentication.md) for request examples,
 password rules, RSA key configuration, authorization boundaries, error responses,
@@ -209,20 +221,21 @@ To intentionally delete **all local service data**, use the same command with `-
 
 ## Deferred functionality
 
-`judge-worker` intentionally contains only its POM and `.gitkeep` source directory
-placeholders. It has no Java classes, Spring Boot configuration, Redis consumers,
-compilation, execution, or deployment resources. It stays empty until explicitly
-requested. Its build produces an ordinary, non-executable JAR.
+`judge-worker` provides Redis consumption, Docker sandbox execution and grading for Java, Python,
+C, C++, JavaScript, TypeScript, Kotlin, Go, Rust and C#. See its [README](services/judge-worker/README.md)
+for image preparation, supported versions and single-file restrictions. Enable the
+[internal worker transport](docs/worker-transport.md) with a separate service token to connect grading
+to durable API results. Local end-to-end tests cover this path; production deployment remains separate.
 
 Stage 9 adds [evaluation results, history, and leaderboards](docs/evaluation-results.md),
-plus an internal completion service restricted to a future authenticated evaluator.
-Unavailable grades remain null. Source downloads and worker transport are deferred.
+plus an internal completion service restricted to the authenticated worker.
+Unavailable grades remain null. Private source downloads are available only through the worker transport.
 Local registration, JWT login, initial administrator bootstrap, user/assignment/test-case
 management, and student submissions are implemented. Additional ADMIN provisioning,
-account deletion, refresh tokens, password reset, and external authentication remain
+account deletion, refresh tokens, and password reset remain
 deferred. SUBMISSION_CREATED events are stored transactionally in the outbox.
 Redis Streams now receives identifier-only events with stable IDs and at-least-once delivery.
-A future authenticated worker transport will connect evaluation to the API/storage. No
+The authenticated worker transport connects evaluation to API/storage. No
 untrusted code is executed by the API and no evaluation results are fabricated.
 Basic API Docker and Kubernetes/k3s resources are included; provisioning backing services,
 production ingress/TLS, backups, and actual deployment remain operator responsibilities.
@@ -253,4 +266,4 @@ for secrets are introduced.
 Proposed targets are 99.5% monthly availability, acceptance p95 <= 500 ms, burst
 p99 <= 2 seconds, and zero acknowledged submission loss as a reliability objective.
 They require measurement and operational validation; no concurrency capacity or
-single-node high availability is claimed. judge-worker remains intentionally empty.
+single-node high availability is claimed. Worker-to-API integration is verified locally with real dependencies.

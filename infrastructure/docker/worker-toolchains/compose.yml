@@ -1,0 +1,26 @@
+# Image preparation only; do not start these as persistent services.
+services:
+  java:
+    image: eclipse-temurin:21-jdk
+  python:
+    image: python:3.13-slim
+  gcc:
+    image: gcc:14
+  node:
+    image: node:22-bookworm-slim
+  typescript:
+    image: judge-typescript:5.8.3
+    build:
+      context: .
+      dockerfile: typescript.Dockerfile
+  kotlin:
+    image: judge-kotlin:2.1.20
+    build:
+      context: .
+      dockerfile: kotlin.Dockerfile
+  go:
+    image: golang:1.24-bookworm
+  rust:
+    image: rust:1.85-bookworm
+  csharp:
+    image: mcr.microsoft.com/dotnet/sdk:8.0

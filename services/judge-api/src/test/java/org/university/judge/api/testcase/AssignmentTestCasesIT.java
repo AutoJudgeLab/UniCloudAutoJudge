@@ -362,7 +362,7 @@ class AssignmentTestCasesIT {
             var originalRevision = db.queryForList("SELECT * FROM assignment_revisions WHERE id = ?", zeroRevision);
             Flyway upgraded = Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                     .schemas(schema).defaultSchema(schema).load();
-            assertThat(upgraded.migrate().migrationsExecuted).isEqualTo(4);
+            assertThat(upgraded.migrate().migrationsExecuted).isEqualTo(6);
             upgraded.validate();
             assertThat(db.queryForObject("SELECT status FROM assignments WHERE id = ?", String.class, metadataOnly)).isEqualTo("DRAFT");
             assertThat(db.queryForObject("SELECT status FROM assignments WHERE id = ?", String.class, legacyZero)).isEqualTo("DRAFT");

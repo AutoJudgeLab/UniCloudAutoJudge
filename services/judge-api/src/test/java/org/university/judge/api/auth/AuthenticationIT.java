@@ -90,6 +90,15 @@ class AuthenticationIT {
     }
 
     @Test
+    void workerTransportIsClosedByDefault() throws Exception {
+        String token = UUID.randomUUID().toString() + UUID.randomUUID();
+        var request = HttpRequest.newBuilder(URI.create(base + "/internal/worker/v1/submissions/" + UUID.randomUUID() + "/attempts"))
+                .header("Authorization", "Bearer " + token).header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString("{}"));
+        assertProblem(HTTP.send(request.build(), HttpResponse.BodyHandlers.ofString()), 401, "UNAUTHORIZED");
+    }
+
+    @Test
     void registrationRejectsRoleAndUnknownFields() throws Exception {
         for (String field : List.of("role", "enabled", "userId")) {
             String name = name();

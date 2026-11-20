@@ -28,14 +28,12 @@ public class User extends CreatedEntity {
     private String username;
 
     @Email
-    @NotBlank
     @Size(max = 254)
-    @Column(name = "email", nullable = false, length = 254)
+    @Column(name = "email", length = 254)
     private String email;
 
-    @NotBlank
     @Size(max = 255)
-    @Column(name = "password_hash", nullable = false, length = 255)
+    @Column(name = "password_hash", length = 255)
     private String passwordHash;
 
     @NotNull
@@ -62,6 +60,28 @@ public class User extends CreatedEntity {
         this.email = email;
         this.passwordHash = passwordHash;
         this.role = role;
+    }
+
+    @Column(name = "external_issuer", length = 512)
+    private String externalIssuer;
+
+    @Column(name = "external_subject", length = 255)
+    private String externalSubject;
+
+    public static User portal(String issuer, String subject, String email, Role role) {
+        User user = new User("portal:" + java.util.UUID.randomUUID(), email, null, role);
+        user.externalIssuer = issuer;
+        user.externalSubject = subject;
+        return user;
+    }
+
+    @JsonIgnore
+    public boolean isExternal() { return externalIssuer != null; }
+
+    public void synchronizePortal(String email, Role role) {
+        if (!isExternal()) throw new IllegalStateException("Not a portal identity");
+        this.email = email;
+        this.role = Objects.requireNonNull(role);
     }
 
     public void setEnabled(boolean enabled) {

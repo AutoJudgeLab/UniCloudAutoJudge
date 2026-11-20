@@ -8,6 +8,7 @@ public record RunResult(Outcome outcome, int exitCode, String stdout, String std
         TIME_LIMIT,
         MEMORY_LIMIT,
         OUTPUT_LIMIT,
+        WORKSPACE_LIMIT,
         /** The sandbox itself failed (Docker missing, image not pulled...). Never the student's fault. */
         SANDBOX_ERROR
     }

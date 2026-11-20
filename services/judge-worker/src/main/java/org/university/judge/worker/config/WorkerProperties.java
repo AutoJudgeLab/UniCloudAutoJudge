@@ -38,7 +38,18 @@ public record WorkerProperties(
     public record Limits(Duration timeLimit, int memoryMb, Duration compileTimeLimit, int compileMemoryMb,
             int maxOutputBytes, int storedOutputBytes) { }
 
-    public record Sandbox(String dockerBinary, double cpus, int pidsLimit, int tmpfsMb, Duration startupGrace) { }
+    public record Sandbox(String dockerBinary, double cpus, int pidsLimit, int tmpfsMb, Duration startupGrace,
+            @org.springframework.boot.context.properties.bind.DefaultValue("536870912") long workspaceBytes,
+            @org.springframework.boot.context.properties.bind.DefaultValue("10000") int workspaceFiles) {
+        public Sandbox(String dockerBinary, double cpus, int pidsLimit, int tmpfsMb, Duration startupGrace) {
+            this(dockerBinary, cpus, pidsLimit, tmpfsMb, startupGrace, 536870912, 10000);
+        }
+        public Sandbox {
+            if (workspaceBytes < 1048576 || workspaceFiles < 1) throw new IllegalArgumentException("Invalid workspace limits");
+        }
+    }
 
-    public record Languages(List<String> enabled, String javaImage, String pythonImage, String gccImage) { }
+    public record Languages(List<String> enabled, String javaImage, String pythonImage, String gccImage,
+            String nodeImage, String typescriptImage, String kotlinImage, String goImage, String rustImage,
+            String csharpImage) { }
 }

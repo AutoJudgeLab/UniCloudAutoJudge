@@ -10,14 +10,22 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificationExecutor<User> {
+    Optional<User> findByExternalIssuerAndExternalSubject(String issuer, String subject);
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.externalIssuer = :issuer and u.externalSubject = :subject")
+    Optional<User> findExternalForUpdate(@Param("issuer") String issuer, @Param("subject") String subject);
     Optional<User> findByUsername(String username);
     Optional<User> findByEmail(String email);
-    Optional<User> findByUsernameIgnoreCase(String username);
-    Optional<User> findByEmailIgnoreCase(String email);
+    @Query("select u from User u where lower(u.username) = lower(:username) and u.externalIssuer is null")
+    Optional<User> findByUsernameIgnoreCase(@Param("username") String username);
+    @Query("select u from User u where lower(u.email) = lower(:email) and u.externalIssuer is null")
+    Optional<User> findByEmailIgnoreCase(@Param("email") String email);
     boolean existsByUsernameIgnoreCase(String username);
     boolean existsByEmailIgnoreCase(String email);
-    boolean existsByRole(Role role);
-    long countByRoleAndEnabledTrue(Role role);
+    @Query("select (count(u) > 0) from User u where u.role = :role and u.externalIssuer is null")
+    boolean existsByRole(@Param("role") Role role);
+    @Query("select count(u) from User u where u.role = :role and u.enabled = true and u.externalIssuer is null")
+    long countByRoleAndEnabledTrue(@Param("role") Role role);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from User u where u.id = :id")

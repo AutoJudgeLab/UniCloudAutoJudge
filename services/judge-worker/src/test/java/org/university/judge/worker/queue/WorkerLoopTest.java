@@ -30,6 +30,7 @@ import org.university.judge.worker.sandbox.RunResult.Outcome;
 class WorkerLoopTest {
 
     private static final class MemoryQueue implements SubmissionQueue {
+        @Override public void touch(QueuedEvent event) { }
         final LinkedBlockingQueue<QueuedEvent> ready = new LinkedBlockingQueue<>();
         final List<String> acknowledged = new ArrayList<>();
         final List<String> dead = new ArrayList<>();
@@ -89,6 +90,7 @@ class WorkerLoopTest {
             return new RunResult(Outcome.COMPLETED, 0, "5\n", "", 5);
         }, new LanguageProfiles(properties), properties);
         JudgeApiClient api = new JudgeApiClient() {
+            @Override public long heartbeat(UUID submissionId, UUID attemptId) { return 240_000; }
             @Override public BeginResult begin(UUID submissionId, UUID attemptId, UUID eventId) {
                 return BeginResult.started(new JudgeJob(submissionId, attemptId, UUID.randomUUID(), "JAVA", "Main.java",
                         "public class Main { }", null, null, List.of(Fixtures.test(0, "2 3\n", "5\n", "100"))));

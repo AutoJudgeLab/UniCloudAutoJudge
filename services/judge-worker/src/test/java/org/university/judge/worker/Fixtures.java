@@ -11,10 +11,13 @@ import org.university.judge.worker.model.TestCase;
 /** Shared test data. No Spring context is needed anywhere in the unit tests. */
 public final class Fixtures {
 
+    public static final List<String> ALL_LANGUAGES = List.of("JAVA", "PYTHON", "C", "CPP", "JAVASCRIPT",
+            "TYPESCRIPT", "KOTLIN", "GO", "RUST", "CSHARP");
+
     private Fixtures() { }
 
     public static WorkerProperties properties() {
-        return properties("docker", "http://localhost:1", List.of("JAVA", "PYTHON", "C", "CPP"));
+        return properties("docker", "http://localhost:1", ALL_LANGUAGES);
     }
 
     public static WorkerProperties properties(String dockerBinary, String apiBaseUrl, List<String> languages) {
@@ -23,7 +26,9 @@ public final class Fixtures {
                 new WorkerProperties.Api(apiBaseUrl, "test-token", Duration.ofSeconds(2), Duration.ofSeconds(5)),
                 new WorkerProperties.Limits(Duration.ofSeconds(2), 256, Duration.ofSeconds(30), 512, 1_048_576, 16_384),
                 new WorkerProperties.Sandbox(dockerBinary, 1.0, 128, 64, Duration.ofSeconds(3)),
-                new WorkerProperties.Languages(languages, "eclipse-temurin:21-jdk", "python:3.13-slim", "gcc:14"));
+                new WorkerProperties.Languages(languages, "eclipse-temurin:21-jdk", "python:3.13-slim", "gcc:14",
+                        "node:22-bookworm-slim", "judge-typescript:5.8.3", "judge-kotlin:2.1.20",
+                        "golang:1.24-bookworm", "rust:1.85-bookworm", "mcr.microsoft.com/dotnet/sdk:8.0"));
     }
 
     public static TestCase test(int order, String input, String expected, String points) {
