@@ -65,6 +65,16 @@ validates the ID token and redirects to the fixed local `/api/users/me` path.
 An error returns a sanitized Problem Detail; it never starts a redirect loop.
 No API endpoint returns Portal tokens to browser JavaScript.
 
+For the [React frontend](../apps/judge-web/README.md), start the UI at
+`http://localhost:5173`, set
+`PORTAL_REDIRECT_URI=http://localhost:5173/login/oauth2/code/portal` and
+`PORTAL_LOGIN_SUCCESS_PATH=/assignments`, and recreate the API container.
+Start login through the UI origin. Vite proxies all API and OIDC paths to the
+API on port 8081. The success path accepts only `/api/users/me` (the default)
+or `/assignments`; arbitrary request-supplied redirects are not accepted.
+In frontend mode failed OIDC callbacks return to `/login?error=sso` with no
+provider details or tokens. API-only mode preserves Problem Detail failures.
+
 Production requires a separately registered HTTPS callback with an exact match.
 Configure `PORTAL_ISSUER` for that environment. HTTP is permitted only for loopback
 development URLs. The application validates the authentication-mode setting and

@@ -1,0 +1,31 @@
+# Local static build + same-origin proxy. Combine with compose.yml.
+services:
+  judge-api:
+    environment:
+      PORTAL_REDIRECT_URI: http://localhost:${JUDGE_WEB_PORT:-8088}/login/oauth2/code/portal
+      PORTAL_LOGIN_SUCCESS_PATH: /assignments
+  judge-web:
+    image: online-judge-web:0.1.0-SNAPSHOT
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/judge-web/Dockerfile
+    depends_on:
+      judge-api:
+        condition: service_healthy
+    environment:
+      JUDGE_PUBLIC_ADDRESS: http://localhost:8088
+      JUDGE_API_UPSTREAM: judge-api:8080
+    ports:
+      - "127.0.0.1:${JUDGE_WEB_PORT:-8088}:8088"
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: unless-stopped
+
+volumes:
+  caddy-data:
+  caddy-config:

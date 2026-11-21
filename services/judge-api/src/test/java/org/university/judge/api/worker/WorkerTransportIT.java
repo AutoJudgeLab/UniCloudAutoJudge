@@ -108,6 +108,18 @@ class WorkerTransportIT {
 
     @AfterAll static void stop() { if (context != null) context.close(); }
 
+    @Test void uploadOptionsExposeOnlyAcceptedLanguagesAndLimits() throws Exception {
+        var response = HTTP.send(HttpRequest.newBuilder(URI.create(base + "/api/submissions/options"))
+                .header("Authorization", "Bearer " + studentToken).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(response.statusCode()).isEqualTo(200);
+        var options = JSON.readTree(response.body());
+        assertThat(options.get("maxSourceBytes").asLong()).isEqualTo(1048576L);
+        assertThat(options.get("languages").size()).isEqualTo(10);
+        assertThat(response.body()).doesNotContain(S3_PASSWORD, S3_USER, WORKER_TOKEN, REDIS_PASSWORD);
+        assertThat(HTTP.send(HttpRequest.newBuilder(URI.create(base + "/api/submissions/options"))
+                .GET().build(), HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(401);
+    }
+
     @Test void workerAndUserCredentialsCannotCrossSecurityBoundaries() throws Exception {
         UUID attempt = UUID.randomUUID();
         for (String token : List.of("", "invalid", studentToken, teacherToken, adminToken)) {
@@ -254,6 +266,22 @@ class WorkerTransportIT {
     }
 
     @Test void realWorkerConsumesRedisGradesInDockerAndStoresAnObservableResult() throws Exception {
+        assertRealWorkerResult("ACCEPTED", "100");
+    }
+
+    @Test void realWorkerReportsWrongAnswers() throws Exception {
+        submission = upload("public class Main { public static void main(String[] args) { System.out.println(0); } }");
+        event = jdbc.queryForObject("SELECT id FROM outbox_events WHERE aggregate_id = ?", UUID.class, submission);
+        assertRealWorkerResult("WRONG_ANSWER", "0");
+    }
+
+    @Test void realWorkerReportsCompilationFailure() throws Exception {
+        submission = upload("public class Main { this is not Java; }");
+        event = jdbc.queryForObject("SELECT id FROM outbox_events WHERE aggregate_id = ?", UUID.class, submission);
+        assertRealWorkerResult("COMPILATION_ERROR", "0");
+    }
+
+    private void assertRealWorkerResult(String verdict, String score) throws Exception {
         var properties = workerProperties(Duration.ofMinutes(5), 5);
         var languages = new LanguageProfiles(properties);
         var queue = new RedisStreamQueue(redis, properties);
@@ -271,8 +299,8 @@ class WorkerTransportIT {
                 Thread.sleep(100);
             } while (System.nanoTime() < deadline);
             assertThat(result.get("status").asText()).isEqualTo("COMPLETED");
-            assertThat(result.get("verdict").asText()).isEqualTo("ACCEPTED");
-            assertThat(result.get("totalScore").decimalValue()).isEqualByComparingTo("100");
+            assertThat(result.get("verdict").asText()).isEqualTo(verdict);
+            assertThat(result.get("totalScore").decimalValue()).isEqualByComparingTo(score);
         } finally { loop.stop(); }
         assertThat(redis.opsForStream().pending(STREAM, properties.group()).getTotalPendingMessages()).isZero();
         assertThat(jdbc.queryForObject("SELECT published_at IS NOT NULL FROM outbox_events WHERE id = ?", Boolean.class, event)).isTrue();
@@ -371,10 +399,13 @@ class WorkerTransportIT {
                 .get("accessToken").asText();
     }
     private UUID upload() throws Exception {
+        return upload(SOURCE);
+    }
+    private UUID upload(String source) throws Exception {
         String boundary = "upload-" + UUID.randomUUID();
         String multipart = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"programmingLanguage\"\r\n\r\nJAVA\r\n"
                 + "--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"Main.java\"\r\n"
-                + "Content-Type: text/plain\r\n\r\n" + SOURCE + "\r\n--" + boundary + "--\r\n";
+                + "Content-Type: text/plain\r\n\r\n" + source + "\r\n--" + boundary + "--\r\n";
         var request = HttpRequest.newBuilder(URI.create(base + "/api/assignments/" + assignment + "/submissions"))
                 .header("Authorization", "Bearer " + studentToken).header("Idempotency-Key", UUID.randomUUID().toString())
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary)

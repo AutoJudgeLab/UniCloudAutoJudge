@@ -8,12 +8,15 @@ SUBMISSION_CREATED outbox event. It does not compile, execute, or grade code.
 
 | Endpoint | Access and response |
 | --- | --- |
+| `GET /api/submissions/options` | Authenticated user; accepted languages/extensions and maximum source bytes. |
 | `POST /api/assignments/{assignmentId}/submissions` | STUDENT only; multipart upload; 201 after durable acceptance, or an accepted retry. |
 | `GET /api/submissions/{submissionId}` | Owning STUDENT, assignment-owning TEACHER, or ADMIN. |
 | `GET /api/users/me/submissions` | Authenticated user's own submissions, identified from the security context. |
 | `GET /api/assignments/{assignmentId}/submissions` | STUDENT sees only their own; owning TEACHER and ADMIN see all for that assignment. |
 
-All endpoints require a bearer JWT. Private detail reads outside the caller's
+All endpoints require authentication: a Judge session in Portal browser mode,
+or a supported bearer token for API clients. Session-authenticated uploads also
+require CSRF; see [Portal SSO](portal-sso.md). Private detail reads outside the caller's
 scope return 404. Students with existing submissions retain access to their
 history after an assignment becomes draft or archived. Source object keys, source
 content, password data, and grading test data are never included in these DTOs.
@@ -49,6 +52,12 @@ assignmentRevisionId, studentId, programmingLanguage, originalFilename, sourceSi
 startedAt, completedAt, and attemptCount. Legacy rows may have a null sourceSize.
 
 ## File and language validation
+
+`GET /api/submissions/options` returns `maxSourceBytes` and a `languages` array
+of `{"value":"JAVA","extension":"java"}` entries. The list filters the API's
+language enum by configured `S3_ALLOWED_EXTENSIONS`; size comes from
+`S3_MAX_UPLOAD_SIZE`. It exposes no storage credentials. These are API acceptance
+settings, not a worker-health or installed-toolchain check.
 
 | programmingLanguage | Required extension |
 | --- | --- |

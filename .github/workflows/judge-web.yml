@@ -1,0 +1,62 @@
+name: Judge Web
+
+on:
+  pull_request:
+    paths: ["apps/judge-web/**", "infrastructure/docker/judge-web/**", "infrastructure/docker/compose.web*.yml", ".github/workflows/judge-web.yml"]
+  push:
+    branches: [main]
+    paths: ["apps/judge-web/**", "infrastructure/docker/judge-web/**", "infrastructure/docker/compose.web*.yml", ".github/workflows/judge-web.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/judge-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/judge-web/package-lock.json
+      - run: npm ci
+      - run: npm run api:check
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: judge-web-test-results
+          path: apps/judge-web/test-results
+          retention-days: 7
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/judge-web/package-lock.json
+      - run: npm ci
+        working-directory: apps/judge-web
+      - run: npx playwright install --with-deps chromium
+        working-directory: apps/judge-web
+      - run: docker build -f infrastructure/docker/judge-web/Dockerfile -t judge-web:check .
+      - run: docker run --rm --entrypoint caddy judge-web:check validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      - run: docker run -d --name judge-web-check -p 127.0.0.1:8088:8088 -e JUDGE_API_UPSTREAM=127.0.0.1:9 judge-web:check
+      - run: curl --retry 10 --retry-connrefused --retry-delay 1 --fail http://localhost:8088/login --output /dev/null
+      - run: node scripts/verify-deployment.mjs
+        working-directory: apps/judge-web
+        env:
+          JUDGE_SMOKE_WITHOUT_API: "true"
+      - if: always()
+        run: docker stop judge-web-check

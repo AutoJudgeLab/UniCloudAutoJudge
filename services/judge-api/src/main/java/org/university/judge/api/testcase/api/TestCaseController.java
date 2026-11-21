@@ -6,6 +6,7 @@ import java.util.UUID;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -47,16 +48,22 @@ public class TestCaseController {
 
     @GetMapping
     @Operation(summary = "List test cases in execution order", description = "Owner TEACHER or ADMIN sees all current cases. STUDENT sees only public cases on a published, sealed revision.")
+    @ApiResponse(responseCode = "200", description = "Visible current test cases",
+            content = @Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = TestCaseResponse.class))))
     public ResponseEntity<List<TestCaseResponse>> list(@PathVariable UUID assignmentId) { return response(testCases.list(assignmentId)); }
 
     @GetMapping("/{testCaseId}")
     @Operation(summary = "Get a visible current test case", description = "Hidden cases return 404 to students. Historical IDs are not exposed by these routes.")
+    @ApiResponse(responseCode = "200", description = "Current test case",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = TestCaseResponse.class)))
     public ResponseEntity<TestCaseResponse> get(@PathVariable UUID assignmentId, @PathVariable UUID testCaseId) {
         return response(testCases.get(assignmentId, testCaseId));
     }
 
     @PutMapping("/{testCaseId}")
     @Operation(summary = "Replace a test case", description = "Owner TEACHER or ADMIN. On a published/sealed revision, copies all tests to a new draft and edits the copy. Returns its new ID; old IDs become stale.")
+    @ApiResponse(responseCode = "200", description = "Current test case",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = TestCaseResponse.class)))
     public ResponseEntity<TestCaseResponse> update(@PathVariable UUID assignmentId, @PathVariable UUID testCaseId,
             @Valid @RequestBody TestCaseRequest request) { return response(testCases.update(assignmentId, testCaseId, request)); }
 
