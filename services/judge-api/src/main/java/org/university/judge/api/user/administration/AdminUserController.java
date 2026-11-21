@@ -38,6 +38,8 @@ public class AdminUserController {
 
     @GetMapping
     @Operation(summary = "List users", description = "ADMIN only. Zero-based pagination, case-insensitive substring searches, AND-combined filters, and allowlisted sorting.")
+    @ApiResponse(responseCode = "200", description = "User management response",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserPageResponse.class)))
     public UserPageResponse list(@Valid @ModelAttribute @ParameterObject UserSearchRequest request) {
         return users.list(request);
     }
@@ -46,6 +48,8 @@ public class AdminUserController {
     @Operation(summary = "Get a user", description = "ADMIN only. Returns public profile fields without password or token metadata.")
     @ApiResponse(responseCode = "404", description = "User not found",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "200", description = "User management response",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponse.class)))
     public UserResponse get(@PathVariable UUID userId) {
         return users.get(userId);
     }
@@ -66,6 +70,8 @@ public class AdminUserController {
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
     @ApiResponse(responseCode = "409", description = "Last active administrator protected or concurrent update; retry a concurrency conflict",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "200", description = "User management response",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponse.class)))
     public UserResponse changeStatus(@PathVariable UUID userId, @Valid @RequestBody ChangeUserStatusRequest request) {
         return users.changeStatus(userId, request.enabled());
     }

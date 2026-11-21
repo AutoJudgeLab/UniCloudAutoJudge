@@ -37,6 +37,18 @@ class WorkerLanguageConfigurationTest {
     }
 
     @Test
+    void shippedConfigurationBindsSandboxAndLimitsForTheExecutableWorker() {
+        var properties = bind(null);
+        assertNotNull(properties.sandbox(), "Executable worker must bind its Docker sandbox settings");
+        assertEquals("docker", properties.sandbox().dockerBinary());
+        assertEquals(1.0, properties.sandbox().cpus());
+        assertEquals(128, properties.sandbox().pidsLimit());
+        assertEquals(536870912L, properties.sandbox().workspaceBytes());
+        assertEquals(10000, properties.sandbox().workspaceFiles());
+        assertEquals(java.time.Duration.ofSeconds(5), properties.limits().timeLimit());
+    }
+
+    @Test
     void operatorCanRestrictLanguagesWithoutRecompiling() {
         var profiles = new LanguageProfiles(bind("PYTHON,RUST"));
         assertEquals(List.of("PYTHON", "RUST"), profiles.enabledKeys());

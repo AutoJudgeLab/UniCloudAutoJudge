@@ -58,14 +58,17 @@ public class SubmissionController {
 
     @GetMapping("/api/submissions/{submissionId}")
     @Operation(summary = "Read a private submission", description = "Owner STUDENT, assignment owner TEACHER, or ADMIN. Source keys and source content are not returned.")
+    @ApiResponse(responseCode = "200", description = "Visible submission", content = @Content(mediaType = "application/json", schema = @Schema(implementation = SubmissionResponse.class)))
     public SubmissionResponse get(@PathVariable UUID submissionId) { return queries.get(submissionId); }
 
     @GetMapping("/api/users/me/submissions")
     @Operation(summary = "List the authenticated user's own submissions")
+    @ApiResponse(responseCode = "200", description = "Own submissions page", content = @Content(mediaType = "application/json", schema = @Schema(implementation = SubmissionPageResponse.class)))
     public SubmissionPageResponse mine(@Valid @ModelAttribute @ParameterObject SubmissionListRequest request) { return queries.mine(request); }
 
     @GetMapping("/api/assignments/{assignmentId}/submissions")
     @Operation(summary = "List submissions for an assignment", description = "Students see their own submissions only; owning teachers and administrators see all. Historical access remains available after archiving.")
+    @ApiResponse(responseCode = "200", description = "Visible submissions page", content = @Content(mediaType = "application/json", schema = @Schema(implementation = SubmissionPageResponse.class)))
     public SubmissionPageResponse forAssignment(@PathVariable UUID assignmentId, @Valid @ModelAttribute @ParameterObject SubmissionListRequest request) {
         return queries.forAssignment(assignmentId, request);
     }

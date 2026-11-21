@@ -1,5 +1,14 @@
 # University Online Judge
 
+See [remaining work and release priorities](docs/remaining-work.md) for production
+prerequisites, the next frontend improvements, and proposed integrations/features.
+
+The [React frontend](apps/judge-web/README.md) provides Portal login, a profile,
+assignments, student uploads, results, leaderboards, teacher editing and user access administration.
+Local UI: `http://localhost:5173`, API: port 8081.
+See its README for callback configuration and startup instructions, and
+[frontend delivery](docs/frontend-deployment.md) for the container/HTTPS setup.
+
 UniCloud Portal integration is available with AUTHENTICATION_MODE=portal.
 See [Portal SSO and inter-module calls](docs/portal-sso.md) for OIDC setup,
 identity migration, session/CSRF usage and the token-exchange proposal.

@@ -22,6 +22,10 @@ public record WorkerProperties(
         Languages languages) {
 
     public WorkerProperties {
+        java.util.Objects.requireNonNull(api, "judge.worker.api is required");
+        java.util.Objects.requireNonNull(limits, "judge.worker.limits is required");
+        java.util.Objects.requireNonNull(sandbox, "judge.worker.sandbox is required");
+        java.util.Objects.requireNonNull(languages, "judge.worker.languages is required");
         if (concurrency < 1) throw new IllegalArgumentException("judge.worker.concurrency must be at least 1");
         if (maxDeliveries < 1) throw new IllegalArgumentException("judge.worker.max-deliveries must be at least 1");
     }
@@ -44,6 +48,7 @@ public record WorkerProperties(
         public Sandbox(String dockerBinary, double cpus, int pidsLimit, int tmpfsMb, Duration startupGrace) {
             this(dockerBinary, cpus, pidsLimit, tmpfsMb, startupGrace, 536870912, 10000);
         }
+        @org.springframework.boot.context.properties.bind.ConstructorBinding
         public Sandbox {
             if (workspaceBytes < 1048576 || workspaceFiles < 1) throw new IllegalArgumentException("Invalid workspace limits");
         }

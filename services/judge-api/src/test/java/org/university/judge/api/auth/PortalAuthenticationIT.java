@@ -340,11 +340,17 @@ class PortalAuthenticationIT {
                 .headers().firstValue("location").orElseThrow()).getRawQuery());
         String code = UUID.randomUUID().toString();
         CODES.put(code, new Login(profile("TEACHER"), auth, false));
-        try (var replica = new SpringApplicationBuilder(JudgeApiApplication.class, AuthorizationProbes.class).run(applicationArguments)) {
+        var frontendArguments = new ArrayList<>(Arrays.asList(applicationArguments));
+        frontendArguments.add("--security.portal.login-success-path=/assignments");
+        try (var replica = new SpringApplicationBuilder(JudgeApiApplication.class, AuthorizationProbes.class).run(frontendArguments.toArray(String[]::new))) {
             String replicaBase = "http://localhost:" + replica.getEnvironment().getRequiredProperty("local.server.port");
             base = replicaBase;
-            assertThat(get(browser.http(), "/login/oauth2/code/portal?code=" + code + "&state=" + encode(auth.get("state")), null)
-                    .statusCode()).isEqualTo(302);
+            var callback = get(browser.http(), "/login/oauth2/code/portal?code=" + code + "&state=" + encode(auth.get("state")), null);
+            assertThat(callback.statusCode()).isEqualTo(302);
+            assertThat(callback.headers().firstValue("location")).contains("/assignments");
+            var rejected = get(browser().http(), "/login/oauth2/code/portal?code=invalid&state=invalid", null);
+            assertThat(rejected.statusCode()).isEqualTo(302);
+            assertThat(rejected.headers().firstValue("location")).contains("/login?error=sso");
             assertThat(get(browser.http(), "/api/teacher/probe", null).statusCode()).isEqualTo(200);
             base = originalBase;
             assertThat(get(browser.http(), "/api/teacher/probe", null).statusCode()).isEqualTo(200);

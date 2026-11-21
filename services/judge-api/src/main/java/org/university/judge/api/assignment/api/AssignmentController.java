@@ -59,16 +59,22 @@ public class AssignmentController {
 
     @GetMapping
     @Operation(summary = "List visible assignments", description = "Students see published assignments only; teachers see their own assignments; administrators see all. Pagination is zero-based.")
+    @ApiResponse(responseCode = "200", description = "Visible assignments page",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = AssignmentPageResponse.class)))
     public AssignmentPageResponse list(@Valid @ModelAttribute @ParameterObject AssignmentListRequest request) {
         return assignments.list(request);
     }
 
     @GetMapping("/{assignmentId}")
     @Operation(summary = "Get a visible assignment")
+    @ApiResponse(responseCode = "200", description = "Visible assignment",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = AssignmentResponse.class)))
     public ResponseEntity<AssignmentResponse> get(@PathVariable UUID assignmentId) { return response(assignments.get(assignmentId)); }
 
     @PutMapping("/{assignmentId}")
     @Operation(summary = "Replace assignment metadata", description = "Owner TEACHER or ADMIN. Published edits require createNewRevision=true and return the assignment to DRAFT; prior revisions are retained and test cases copied unchanged.")
+    @ApiResponse(responseCode = "200", description = "Updated assignment",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = AssignmentResponse.class)))
     public ResponseEntity<AssignmentResponse> update(@PathVariable UUID assignmentId,
             @Valid @RequestBody AssignmentRequest request,
             @Parameter(description = "Explicitly start a new draft revision; required for published edits or sealed grading configurations")
@@ -86,10 +92,14 @@ public class AssignmentController {
 
     @PostMapping("/{assignmentId}/publish")
     @Operation(summary = "Publish and seal assignment grading", description = "Owner TEACHER or ADMIN. Requires valid metadata, a future deadline, at least one valid test case, and positive test points summing exactly to maximumScore. Seals the current grading revision before publication.")
+    @ApiResponse(responseCode = "200", description = "Updated assignment",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = AssignmentResponse.class)))
     public ResponseEntity<AssignmentResponse> publish(@PathVariable UUID assignmentId) { return response(assignments.publish(assignmentId)); }
 
     @PostMapping("/{assignmentId}/archive")
     @Operation(summary = "Archive an assignment", description = "Owner TEACHER or ADMIN. Retains all history, makes the assignment read-only and removes it from student discovery. Repeated archive is idempotent.")
+    @ApiResponse(responseCode = "200", description = "Updated assignment",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = AssignmentResponse.class)))
     public ResponseEntity<AssignmentResponse> archive(@PathVariable UUID assignmentId) { return response(assignments.archive(assignmentId)); }
 
     private ResponseEntity<AssignmentResponse> response(AssignmentResult result) {

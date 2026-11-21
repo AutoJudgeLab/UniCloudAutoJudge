@@ -24,6 +24,35 @@ The Compose API profile forwards these settings. On Kubernetes, provide `judge-w
 `judge-api-secrets` before enabling transport. Public ingress must exclude `/internal/worker/**`;
 these routes belong on the private worker connection. They are omitted from OpenAPI.
 
+## Local worker with the frontend
+
+With Compose infrastructure/API on localhost, set these in the root `.env`:
+
+```dotenv
+WORKER_TRANSPORT_ENABLED=true
+JUDGE_API_BASE_URL=http://localhost:8081
+JUDGE_WORKER_TOKEN=<independently-generated-service-secret>
+WORKER_CONCURRENCY=1
+WORKER_CONSUMER_NAME=judge-local
+```
+
+Keep the existing Redis connection settings, then recreate the API so it receives
+the same token. Prepare all [worker toolchain images](../services/judge-worker/README.md#supported-languages)
+and start the worker from the repository root:
+
+```sh
+docker compose --env-file .env -f infrastructure/docker/compose.yml --profile api up -d --build --wait
+mvn -pl services/judge-worker -am package -DskipTests
+python3 infrastructure/operations/run-local-worker.py
+```
+
+The launcher reads `.env` without executing shell code and passes only worker/Redis
+settings plus the API URL/token. Portal, database and S3 credentials are excluded.
+It runs in the foreground (Ctrl+C to stop), using `.local/worker-work` for temporary
+files. Docker must be running. With the frontend on port 5173, a STUDENT can upload
+to a published assignment and watch its evaluation; an ADMIN account cannot submit
+on a student's behalf. A stopped worker leaves new submissions pending.
+
 ## Why HTTP through judge-api
 
 The worker runs untrusted code, so it gets no PostgreSQL or MinIO credentials. judge-api already owns
@@ -151,3 +180,12 @@ Per-assignment time/memory limits and a compiler-diagnostic field remain future 
 carry null limits and use worker defaults. [All ten API languages](../services/judge-worker/README.md#supported-languages)
 have evaluators; disabling a language must be coordinated with API acceptance. The service token
 grants evaluation access across submissions, not user or administrator privileges.
+
+## Executable worker configuration verification
+
+The shipped-YAML binding test also checks that Docker sandbox and grading limits
+are populated when Spring constructs the worker. The sandbox record has an explicit
+constructor-binding annotation because it provides a second convenience constructor.
+Missing nested configuration now fails startup instead of accepting jobs and failing
+later. This was verified with the executable JAR and real Portal/UI submissions;
+a previously pending attempt was recovered and completed after its lease expired.

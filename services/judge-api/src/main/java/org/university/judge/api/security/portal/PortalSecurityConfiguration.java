@@ -39,7 +39,7 @@ import tools.jackson.databind.ObjectMapper;
 
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(name = "security.authentication-mode", havingValue = "portal")
-@EnableConfigurationProperties(PortalSettings.class)
+@EnableConfigurationProperties({PortalSettings.class, PortalBrowserSettings.class})
 @EnableMethodSecurity
 public class PortalSecurityConfiguration {
     @Bean
@@ -92,6 +92,10 @@ public class PortalSecurityConfiguration {
         return new PortalProblemHandler(delegate, mapper);
     }
 
+    @Bean PortalLoginHandler portalLoginHandler(PortalBrowserSettings settings, PortalProblemHandler problems) {
+        return new PortalLoginHandler(settings, problems);
+    }
+
     @Bean @Order(2)
     SecurityFilterChain portalBearerChain(HttpSecurity http, JwtDecoder decoder, PortalJwtConverter converter,
             PortalProblemHandler problems, SecurityProblemHandler denied) throws Exception {
@@ -113,7 +117,8 @@ public class PortalSecurityConfiguration {
     @Bean @Order(3)
     SecurityFilterChain portalBrowserChain(HttpSecurity http, ClientRegistrationRepository clients,
             OAuth2AuthorizedClientRepository authorizedClients, JwtDecoder decoder, PortalJwtConverter converter,
-            PortalIdentityService identities, PortalProblemHandler problems, SecurityProblemHandler denied) throws Exception {
+            PortalIdentityService identities, PortalProblemHandler problems, SecurityProblemHandler denied,
+            PortalLoginHandler loginHandler) throws Exception {
         var resolver = new DefaultOAuth2AuthorizationRequestResolver(clients, "/oauth2/authorization");
         // Confidential clients also MUST use PKCE; Spring's public-client default alone is insufficient.
         resolver.setAuthorizationRequestCustomizer(OAuth2AuthorizationRequestCustomizers.withPkce());
@@ -129,11 +134,8 @@ public class PortalSecurityConfiguration {
                             identities.resolve(user.getSubject(), user.getClaims());
                             return user;
                         }))
-                        .successHandler((request, response, authentication) -> {
-                            response.setStatus(302);
-                            response.setHeader("Location", request.getContextPath() + "/api/users/me");
-                        })
-                        .failureHandler((request, response, failure) -> problems.commence(request, response, failure)))
+                        .successHandler(loginHandler)
+                        .failureHandler(loginHandler))
                 // Default CSRF protection remains enabled for all cookie-authenticated mutations.
                 .logout(logout -> logout.logoutUrl("/auth/logout").invalidateHttpSession(true).clearAuthentication(true)
                         .deleteCookies("JUDGE_SESSION").logoutSuccessHandler((request, response, auth) -> response.setStatus(204)))

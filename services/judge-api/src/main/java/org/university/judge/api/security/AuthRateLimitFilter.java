@@ -2,8 +2,9 @@
 package org.university.judge.api.security;
 
 import java.io.IOException;
-import java.time.Duration;
 import java.util.List;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -21,41 +22,44 @@ import tools.jackson.databind.ObjectMapper;
 import org.university.judge.api.error.ApiProblems;
 
 @Component
+@ConditionalOnProperty(name = "security.authentication-mode", havingValue = "local", matchIfMissing = true)
+@EnableConfigurationProperties(AuthRateLimitSettings.class)
 public class AuthRateLimitFilter extends OncePerRequestFilter {
-
-    private static final int LOGIN_LIMIT = 5;
-    private static final int REGISTER_LIMIT = 3;
-    private static final Duration WINDOW = Duration.ofMinutes(1);
 
     private static final DefaultRedisScript<Long> RATE_LIMIT_SCRIPT =
             new DefaultRedisScript<>(
                     """
                     local count = redis.call('INCR', KEYS[1])
-                    if count == 1 then
+                    if count == 1 or redis.call('TTL', KEYS[1]) < 0 then
                         redis.call('EXPIRE', KEYS[1], ARGV[1])
                     end
-                    return count
+                    if count > tonumber(ARGV[2]) then
+                        return math.max(1, redis.call('TTL', KEYS[1]))
+                    end
+                    return 0
                     """,
                     Long.class
             );
 
     private final StringRedisTemplate redis;
     private final ObjectMapper mapper;
+    private final AuthRateLimitSettings settings;
 
     public AuthRateLimitFilter(
             StringRedisTemplate redis,
-            ObjectMapper mapper) {
+            ObjectMapper mapper, AuthRateLimitSettings settings) {
         this.redis = redis;
         this.mapper = mapper;
+        this.settings = settings;
     }
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        if (!"POST".equalsIgnoreCase(request.getMethod())) {
+        if (!settings.enabled() || !"POST".equalsIgnoreCase(request.getMethod())) {
             return true;
         }
 
-        String path = request.getRequestURI();
+        String path = request.getServletPath();
 
         return !"/api/auth/login".equals(path)
                 && !"/api/auth/register".equals(path);
@@ -67,22 +71,22 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain) throws ServletException, IOException {
 
-        boolean login = "/api/auth/login".equals(request.getRequestURI());
+        boolean login = "/api/auth/login".equals(request.getServletPath());
 
-        int limit = login ? LOGIN_LIMIT : REGISTER_LIMIT;
+        int limit = login ? settings.loginLimit() : settings.registerLimit();
         String endpoint = login ? "login" : "register";
 
         String ip = request.getRemoteAddr();
         String key = "rate-limit:auth:" + endpoint + ":" + ip;
 
         try {
-            Long count = redis.execute(
+            Long retryAfter = redis.execute(
                     RATE_LIMIT_SCRIPT,
                     List.of(key),
-                    String.valueOf(WINDOW.toSeconds())
+                    String.valueOf(settings.window().toSeconds()), String.valueOf(limit)
             );
 
-            if (count == null) {
+            if (retryAfter == null) {
                 writeProblem(
                         response,
                         request,
@@ -93,8 +97,8 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
                 return;
             }
 
-            if (count > limit) {
-                response.setHeader("Retry-After", "60");
+            if (retryAfter > 0) {
+                response.setHeader("Retry-After", retryAfter.toString());
 
                 writeProblem(
                         response,

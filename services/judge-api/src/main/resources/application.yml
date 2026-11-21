@@ -109,6 +109,7 @@ security:
     redirect-uri: ${PORTAL_REDIRECT_URI:http://localhost:8080/login/oauth2/code/portal}
     admin-subjects: ${PORTAL_ADMIN_SUBJECTS:}
     request-timeout: ${PORTAL_REQUEST_TIMEOUT:10s}
+    login-success-path: ${PORTAL_LOGIN_SUCCESS_PATH:/api/users/me}
   rate-limit:
     enabled: ${AUTH_RATE_LIMIT_ENABLED:true}
     login-limit: ${AUTH_LOGIN_LIMIT:5}
