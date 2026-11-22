@@ -2,14 +2,40 @@
 
 **Екип:** 3 — Autograder Engine  
 **Отговорник:** Project Manager (PM), Екип 3  
-**Версия:** 0.5 — включени отчетите на Security Engineer и Software Engineer 2, актуализиран работен PM отчет (неподписани екипни решения)  
-**Проверено към:** 16.11.2026 г., по кода, техническата документация и GitHub Issues в `main`  
+**Версия:** 0.6 — актуален статус и преоценка на GitHub Issues след PR #16–#18; работен PM отчет, неподписани екипни решения  
+**Проверено към:** 22.11.2026 г., по GitHub `main` (merge `6b66cf526`), PR/Issues, technical docs и Actions; без нов независим PM production test  
 **Бизнес източник:** заданието „Седмица 1: Кошмарът в 23:59 ч.“  
 **Продуктова основа:** [product-spec-week1.md](../product-spec-week1.md)
 
 > **Правило за статуса:** „Описано като реализирано“ ≠ „прието от PM“. Статус `DONE` се използва само след преглед на доказателство и работещ приемателен сценарий. Имената на изпълнителите и точните дати се попълват на екипна среща. Никакви обещания за 100% наличност, капацитет или време за оценяване не се приемат без измервания.
 
-## 1. Снимка на продукта
+## Актуален PM статус и план за решение — 22.11.2026 г.
+
+**Напредък след отчета за Седмица 1:** [PR #16 — Worker](https://github.com/AutoJudgeLab/UniCloudAutoJudge/pull/16) (merged 19.11), [PR #17 — Portal SSO + Worker reliability](https://github.com/AutoJudgeLab/UniCloudAutoJudge/pull/17) (merged 20.11) и [PR #18 — React UI](https://github.com/AutoJudgeLab/UniCloudAutoJudge/pull/18) (merged 21.11). Според [system-fixes](../system-fixes-2026-11-19.md) са преминали **275 Java теста** на 20.11; [frontend-plan](../frontend-plan.md) отчита **66 Playwright** теста, **98 целеви Java** теста и **реално staging E2E за Java** с Portal и трите роли. Посочените Java тестови набори се припокриват — **не се сумират**.
+
+**Ново ограничение на доставка:** [CI на последния `main`](https://github.com/AutoJudgeLab/UniCloudAutoJudge/actions/runs/44949202236) от 21.11 е **failed** в container smoke (HTTP connection reset), въпреки успешния workflow на PR #18 и успешния `check` job на `main`. Не твърдим, че production build/deploy е зелен. Публичен HTTPS адрес, постоянен Worker, капацитет 1500 студенти, SLO, действителна 0.00 лв. сметка и restore остават непотвърдени.
+
+**Issue triage към 22.11: всички #2–#12 са `open`; следното е PM предложение, не извършено затваряне.**
+
+| Issue | Текуща оценка | Действие преди `DONE` |
+| --- | --- | --- |
+| [#2 PM-01](https://github.com/AutoJudgeLab/UniCloudAutoJudge/issues/2) | MVP описан; формално съгласие и лични owners не са документирани | Потвърждение на ролите, обхвата и Definition of Done |
+| [#3 ENG-01](https://github.com/AutoJudgeLab/UniCloudAutoJudge/issues/3) | **Кандидат за техническо приключване:** действителен Worker и Java E2E | SE/PM доказателства + формален Security review на sandbox |
+| [#4 SEC-01](https://github.com/AutoJudgeLab/UniCloudAutoJudge/issues/4) | Docker защити и негативни тестове са реализирани; остатъчни рискове има | Писмен Security sign-off и host deployment ограничения |
+| [#5 ENG-02](https://github.com/AutoJudgeLab/UniCloudAutoJudge/issues/5) | **Кандидат за техническо приключване:** автентикиран Worker transport, attempt lease, retries и recovery | Проверка на security критерии, replay/dedup и подписано приемане |
+| [#6 OPS-01](https://github.com/AutoJudgeLab/UniCloudAutoJudge/issues/6) | **ОТВОРЕН:** Caddy/Compose ≠ публичен production URL | Достъпен HTTPS, production Portal client, външен smoke |
+| [#7 PM-02](https://github.com/AutoJudgeLab/UniCloudAutoJudge/issues/7) | **Частично:** Team 1 Portal SSO на staging; Team 2/4 договори липсват | PM потвърждение на интерфейсите, owners и съвместни проверки |
+| [#8 OPS-02](https://github.com/AutoJudgeLab/UniCloudAutoJudge/issues/8) | **ОТВОРЕН:** няма представителен пиков тест | k6 профил за ~1500 студенти, p95/p99, durable IDs и възстановяване |
+| [#9 PM-03](https://github.com/AutoJudgeLab/UniCloudAutoJudge/issues/9) | **ОТВОРЕН:** SLO остават предложения | Review на error budget; отделен baseline за време до оценяване |
+| [#10 OPS-03](https://github.com/AutoJudgeLab/UniCloudAutoJudge/issues/10) | **ОТВОРЕН:** нулев бюджет и restore непотвърдени | Фактически квоти/сметка; PostgreSQL+MinIO backup/restore test |
+| [#11 PM-04](https://github.com/AutoJudgeLab/UniCloudAutoJudge/issues/11) | **Частично:** технически staging E2E, но без PM протокол и публично демо | Протокол A-01–A-10, CI поправка, репетиция и доказателства |
+| [#12 PM-05](https://github.com/AutoJudgeLab/UniCloudAutoJudge/issues/12) | **Частично:** PM документация и merged PR-и | Одобрени branch/review правила и отговорности; затваряне след екипно потвърждение |
+
+**Актуален критичен път:** (1) разрешаване на CI regression в `main`; (2) писмен Security преглед на worker sandbox/secret boundary и възпроизводим E2E; (3) domain, публичен HTTPS и production Portal client; (4) persistent Worker + backups/restore; (5) измерване на пик и SLO; (6) PM приемане и съвместни договори с Екипи 1/2/4. Виж [remaining-work](../remaining-work.md) за REL-02–REL-07. `REL-01` за липсващ commit/PR е **остарял след merge на PR #18**, но review/CI доказателството все още изисква проверка.
+
+**PM действия:** актуализация на issue body/assignees след екипен review; искане за писмен Security sign-off за #3/#4/#5; координация с Portal PM и другите два екипа; PM приемателна матрица и подготовка за представяне. **Нито едно Issue не е затворено с настоящия документ.**
+
+## 1. Снимка на продукта — исторически статус към 16.11.2026 г.
 
 | Област | Документирано състояние | PM извод |
 | --- | --- | --- |
@@ -26,7 +52,7 @@
 
 **Основание:** [архитектура](../architecture.md), [worker integration](../worker-integration.md), [верификация](../verification.md), [SLO](../slo-sla.md), [внедряване](../deployment.md).
 
-## 2. Приоритетен backlog за GitHub Issues/Projects
+## 2. Приоритетен backlog за GitHub Issues/Projects — исторически план към 16.11.2026 г.
 
 Предложени колони: `Backlog` → `Ready` → `In progress` → `In review` → `Done` и отделен маркер `Blocked`.
 
@@ -77,13 +103,13 @@
 
 **Нов екипен доклад за сигурността (16.11):** локално докладвани 5 Login заявки (шестата `429`), 3 Register заявки (четвъртата `429`), `Retry-After: 60`, отказ на Redis (`503`) и възстановяване (`PONG`), `mvn clean verify` BUILD SUCCESS, 7 теста на Judge Storage, 5 теста на Judge API, health UP и JWT endpoint HTTP 200. Това **не променя** докладваните отделно 129 интеграционни теста и 4-заявковия k6 smoke в `docs/verification.md`.
 
-## 3. Критичен път
+## 3. Критичен път — първоначален план от 16.11.2026 г.
 
 `Съгласувано MVP (Java)` → `Публикуван и прегледан Worker` → `Два вътрешни API endpoints + worker identity` → `Истински Redis/Java end-to-end + Security review` → `Публично внедряване` → `Натоварване, SLO и демо`.
 
 **Паралелно:** договорки с други екипи, SLO преглед, нулев бюджет, GitHub Projects, събиране на доказателства. Ако worker или публичната среда закъснеят, PM отбелязва риск незабавно и не представя частичен поток като напълно готов.
 
-## 4. Регистър на рисковете
+## 4. Регистър на рисковете — първоначален отчет (актуалните рискове са горе)
 
 | Риск | Вероятност/ефект (първоначална оценка) | Предложена реакция | Отговорник |
 | --- | --- | --- | --- |
@@ -155,6 +181,8 @@
 
 ## 8. Препратки към единствените технически източници
 
+**Нови към 22.11:** [Worker transport](../worker-transport.md), [Portal SSO](../portal-sso.md), [Frontend plan](../frontend-plan.md), [System fixes 19–20.11](../system-fixes-2026-11-19.md), [Remaining work](../remaining-work.md), [Actions run 44949202236](https://github.com/AutoJudgeLab/UniCloudAutoJudge/actions/runs/44949202236).
+
 - [Продуктова спецификация](../product-spec-week1.md)
 - [Архитектура](../architecture.md)
 - [Worker integration](../worker-integration.md)
@@ -166,4 +194,4 @@
 - Екипен отчет: `UniCloudAutoJudge-week1-software-engineer-2.docx` (SE2, 16.11: Java Worker, 47 локални теста, неинтегрирани endpoints и ограничения; не е независим PM одит)
 - Екипен отчет: `UniCloudAutoJudge-week1.docx` (Security Engineer — Week 1, предоставен 16.11.2026; локалните резултати не са независимо повторени от PM)
 
-*Този документ е PM план за действие и статус, не замества техническите спецификации. Версия 0.5 добавя отчетa на Software Engineer 2 и актуализира по-рано остарелия статус на Worker, без да обявява цялостно приемане. Версия 0.4 добави информацията на Security Engineer, без да обявява незавършения sandbox или непроверените GitHub workflows за готови. Последна документална актуализация: 16.11.2026. След срещата се вписват персоналните собственици, сроковете и действителните резултати, без да се измислят потвърждения.*
+*Този документ е PM план, а не подписано приемане. Версия 0.6 (22.11) съдържа текущия статус в началото; разделите, означени „исторически“, запазват непроменените работни решения и оценки от 16.11, които вече не описват текущата техническа реализация. Личните owners и срокове се потвърждават на среща. Не е извършено затваряне на Issue.*
