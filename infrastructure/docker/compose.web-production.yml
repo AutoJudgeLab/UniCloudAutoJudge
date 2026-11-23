@@ -1,0 +1,20 @@
+# Requires Docker Compose 2.24.4+ (!override). Apply after compose.web.yml.
+# Supply a production .env and a registered HTTPS callback before starting.
+services:
+  judge-web:
+    environment:
+      JUDGE_PUBLIC_ADDRESS: ${JUDGE_PUBLIC_DOMAIN:?Set the public DNS name without scheme or path}
+    ports: !override
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    cap_add: [NET_BIND_SERVICE]
+  judge-api:
+    environment:
+      AUTHENTICATION_MODE: portal
+      PORTAL_ISSUER: ${PORTAL_ISSUER:?Set the production Portal issuer}
+      PORTAL_CLIENT_ID: ${PORTAL_CLIENT_ID:?Set the production Portal client ID}
+      PORTAL_CLIENT_SECRET: ${PORTAL_CLIENT_SECRET:?Set the production Portal client secret}
+      PORTAL_REDIRECT_URI: https://${JUDGE_PUBLIC_DOMAIN:?Set the public DNS name}/login/oauth2/code/portal
+      PORTAL_LOGIN_SUCCESS_PATH: /assignments
+      OPENAPI_ENABLED: "false"

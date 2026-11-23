@@ -1,0 +1,14 @@
+.git
+.env
+.env.*
+**/target
+.idea
+.local
+**/*.log
+**/*.pem
+**/*.key
+**/node_modules
+**/dist
+**/playwright-report
+**/test-results
+

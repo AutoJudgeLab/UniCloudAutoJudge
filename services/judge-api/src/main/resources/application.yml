@@ -1,0 +1,157 @@
+spring:
+  task:
+    scheduling:
+      pool:
+        size: 3
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  application:
+    name: judge-api
+  servlet:
+    multipart:
+      file-size-threshold: 0
+      max-file-size: ${S3_MAX_UPLOAD_SIZE:1MB}
+      max-request-size: ${S3_MAX_REQUEST_SIZE:2MB}
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+    datatype:
+      enum:
+        fail-on-numbers-for-enums: true
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/online_judge}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    validate-migration-naming: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD}
+      username: ${REDIS_USERNAME:}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:2s}
+      timeout: ${REDIS_COMMAND_TIMEOUT:2s}
+      ssl:
+        enabled: ${REDIS_SSL_ENABLED:false}
+
+server:
+  servlet:
+    session:
+      timeout: 30m
+      cookie:
+        name: JUDGE_SESSION
+        http-only: true
+        secure: true
+        same-site: lax
+        path: /
+  port: ${SERVER_PORT:8080}
+  error:
+    include-message: never
+    include-stacktrace: never
+    include-binding-errors: never
+
+submission:
+  cleanup:
+    enabled: ${SUBMISSION_CLEANUP_ENABLED:true}
+    interval: ${SUBMISSION_CLEANUP_INTERVAL:PT1M}
+    initial-delay: ${SUBMISSION_CLEANUP_INITIAL_DELAY:15m}
+    retry-delay: ${SUBMISSION_CLEANUP_RETRY_DELAY:1h}
+    batch-size: ${SUBMISSION_CLEANUP_BATCH_SIZE:20}
+
+storage:
+  s3:
+    endpoint: ${S3_ENDPOINT:http://localhost:9000}
+    access-key: ${S3_ACCESS_KEY:}
+    secret-key: ${S3_SECRET_KEY:}
+    bucket: ${S3_BUCKET:judge-private}
+    region: ${S3_REGION:us-east-1}
+    max-upload-size: ${S3_MAX_UPLOAD_SIZE:1MB}
+    allowed-extensions: ${S3_ALLOWED_EXTENSIONS:java,py,c,cpp,js,ts,kt,go,rs,cs}
+    request-timeout: ${S3_REQUEST_TIMEOUT:10s}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,db,s3
+        dependencies:
+          include: db,redis,s3
+
+springdoc:
+  api-docs:
+    enabled: ${OPENAPI_ENABLED:true}
+  swagger-ui:
+    enabled: ${OPENAPI_ENABLED:true}
+
+security:
+  authentication-mode: ${AUTHENTICATION_MODE:local}
+  portal:
+    issuer: ${PORTAL_ISSUER:https://unicloud-portal-staging.onrender.com}
+    client-id: ${PORTAL_CLIENT_ID:}
+    client-secret: ${PORTAL_CLIENT_SECRET:}
+    redirect-uri: ${PORTAL_REDIRECT_URI:http://localhost:8080/login/oauth2/code/portal}
+    admin-subjects: ${PORTAL_ADMIN_SUBJECTS:}
+    request-timeout: ${PORTAL_REQUEST_TIMEOUT:10s}
+    login-success-path: ${PORTAL_LOGIN_SUCCESS_PATH:/api/users/me}
+  rate-limit:
+    enabled: ${AUTH_RATE_LIMIT_ENABLED:true}
+    login-limit: ${AUTH_LOGIN_LIMIT:5}
+    register-limit: ${AUTH_REGISTER_LIMIT:3}
+    window: ${AUTH_RATE_LIMIT_WINDOW:1m}
+  jwt:
+    private-key-base64: ${JWT_PRIVATE_KEY_BASE64:}
+    public-key-base64: ${JWT_PUBLIC_KEY_BASE64:}
+    issuer: ${JWT_ISSUER:online-judge}
+    audience: ${JWT_AUDIENCE:judge-api}
+    access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:15m}
+  bootstrap:
+    enabled: ${ADMIN_BOOTSTRAP_ENABLED:false}
+    username: ${ADMIN_BOOTSTRAP_USERNAME:}
+    email: ${ADMIN_BOOTSTRAP_EMAIL:}
+    password: ${ADMIN_BOOTSTRAP_PASSWORD:}
+
+worker:
+  recovery:
+    interval: ${WORKER_RECOVERY_INTERVAL:PT1M}
+    minimum-age: ${WORKER_RECOVERY_MINIMUM_AGE:5m}
+  transport:
+    enabled: ${WORKER_TRANSPORT_ENABLED:false}
+    token: ${JUDGE_WORKER_TOKEN:}
+    attempt-lease: ${WORKER_ATTEMPT_LEASE:4m}
+
+
+outbox:
+  enabled: ${OUTBOX_ENABLED:true}
+  stream: ${REDIS_SUBMISSION_STREAM:judge:submissions:v1}
+  max-length: ${REDIS_STREAM_MAX_LENGTH:100000}
+  batch-size: ${OUTBOX_BATCH_SIZE:25}
+  poll-interval: ${OUTBOX_POLL_INTERVAL:PT1S}
+  retry-initial-delay: ${OUTBOX_RETRY_INITIAL_DELAY:1s}
+  retry-max-delay: ${OUTBOX_RETRY_MAX_DELAY:5m}
+
+observability:
+  snapshot-interval: ${METRICS_SNAPSHOT_INTERVAL:PT30S}
+
+logging:
+  structured:
+    format:
+      console: ${LOG_FORMAT:ecs}
+  level:
+    org.hibernate.orm.jdbc.error: OFF
